@@ -1,0 +1,19 @@
+# Source data — too large for git, manually copy to server
+data/
+
+# Generated build artifacts
+build/*.db
+build/*.jsonl
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# WASM binaries (downloaded at dev time)
+web/*.wasm
+web/sql-wasm.js
+
+# OS
+.DS_Store

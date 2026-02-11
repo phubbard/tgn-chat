@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TGN Search</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist/sql-wasm.js"></script>
+  <style>
+    #chat {
+      max-height: 70vh;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+    .message {
+      margin-bottom: 1em;
+      padding: 0.5em;
+      border-radius: 4px;
+    }
+    .message.user {
+      background: var(--background-alt);
+    }
+    .message.assistant {
+      border-left: 3px solid var(--links);
+      padding-left: 1em;
+    }
+    .sources {
+      font-size: 0.85em;
+      opacity: 0.8;
+      margin-top: 0.5em;
+    }
+    .sources summary {
+      cursor: pointer;
+    }
+    #status {
+      font-size: 0.85em;
+      opacity: 0.7;
+    }
+    form {
+      display: flex;
+      gap: 0.5em;
+    }
+    form input[type="text"] {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <h1>The Grey NATO — Search</h1>
+  <p id="status">Loading database...</p>
+
+  <div id="chat"></div>
+
+  <form id="ask-form">
+    <input type="text" id="query" placeholder="Ask about any episode, watch, guest, or topic..." autofocus disabled>
+    <button type="submit" id="submit-btn" disabled>Ask</button>
+  </form>
+
+  <script src="search.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

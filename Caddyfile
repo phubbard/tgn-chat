@@ -1,0 +1,13 @@
+:8080 {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:11434
+	}
+	handle /build/* {
+		root * .
+		file_server
+	}
+	handle {
+		root * web
+		file_server
+	}
+}

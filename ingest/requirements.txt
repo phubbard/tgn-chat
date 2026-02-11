@@ -1,0 +1,2 @@
+requests>=2.31
+sqlite-vec>=0.1.1

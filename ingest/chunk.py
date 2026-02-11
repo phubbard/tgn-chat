@@ -1,0 +1,262 @@
+"""Parse episode.md files into structured chunks for embedding.
+
+Reads data/inputs/{n}/episode.md and produces a JSON lines file with
+three chunk types: synopsis, transcript, and links.
+
+Usage:
+    python ingest/chunk.py [--data-dir data/inputs] [--output build/chunks.jsonl]
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+
+
+def parse_episode_md(filepath):
+    """Parse a single episode.md into its sections.
+
+    Returns dict with keys: number, title, pub_date, synopsis, links, transcript.
+    Transcript is a list of (speaker, text) tuples.
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    result = {
+        "number": None,
+        "title": None,
+        "pub_date": None,
+        "synopsis": None,
+        "links": [],
+        "transcript": [],
+    }
+
+    # Strip YAML frontmatter
+    content = re.sub(r"^---\n.*?\n---\n", "", content, flags=re.DOTALL)
+
+    # Parse title from first heading
+    title_match = re.search(r"^# (.+)$", content, re.MULTILINE)
+    if title_match:
+        result["title"] = title_match.group(1).strip()
+        # Try to extract episode number from title
+        num_match = re.search(
+            r"Episode\s+(\d+)|[–-]\s*(\d+)\s*[–-]", result["title"]
+        )
+        if num_match:
+            result["number"] = int(num_match.group(1) or num_match.group(2))
+
+    # Parse pub_date
+    date_match = re.search(
+        r"Published on (.+?)$", content, re.MULTILINE
+    )
+    if date_match:
+        result["pub_date"] = date_match.group(1).strip()
+
+    # Split into sections by ## headings
+    sections = re.split(r"^## (.+)$", content, flags=re.MULTILINE)
+    # sections is: [preamble, heading1, body1, heading2, body2, ...]
+
+    for i in range(1, len(sections) - 1, 2):
+        heading = sections[i].strip().lower()
+        body = sections[i + 1].strip()
+
+        if heading == "synopsis":
+            result["synopsis"] = body
+
+        elif heading == "links":
+            # Parse markdown links: - [text](url)
+            for link_match in re.finditer(
+                r"-\s*\[([^\]]+)\]\(([^)]+)\)", body
+            ):
+                result["links"].append(
+                    {"text": link_match.group(1), "url": link_match.group(2)}
+                )
+
+        elif heading == "transcript":
+            # Parse pipe-delimited table rows, skip header and separator
+            for row_match in re.finditer(
+                r"^\|([^|*][^|]*)\|(.+)\|$", body, re.MULTILINE
+            ):
+                speaker = row_match.group(1).strip()
+                text = row_match.group(2).strip()
+                if speaker and text and speaker != "----":
+                    result["transcript"].append((speaker, text))
+
+    return result
+
+
+def make_synopsis_chunk(episode, episode_number):
+    """Create a synopsis chunk from parsed episode data."""
+    if not episode["synopsis"]:
+        return None
+    return {
+        "episode_number": episode_number,
+        "episode_title": episode["title"],
+        "pub_date": episode["pub_date"],
+        "chunk_type": "synopsis",
+        "content": episode["synopsis"],
+        "speakers": None,
+        "start_turn": None,
+        "end_turn": None,
+    }
+
+
+def make_link_chunk(episode, episode_number):
+    """Create a links chunk from parsed episode data."""
+    if not episode["links"]:
+        return None
+    lines = [f"- [{l['text']}]({l['url']})" for l in episode["links"]]
+    content = f"Episode links for {episode['title']}:\n" + "\n".join(lines)
+    return {
+        "episode_number": episode_number,
+        "episode_title": episode["title"],
+        "pub_date": episode["pub_date"],
+        "chunk_type": "links",
+        "content": content,
+        "speakers": None,
+        "start_turn": None,
+        "end_turn": None,
+    }
+
+
+def make_transcript_chunks(episode, episode_number, target_words=500):
+    """Group consecutive speaker turns into chunks of ~target_words words."""
+    if not episode["transcript"]:
+        return []
+
+    chunks = []
+    current_turns = []
+    current_words = 0
+    start_turn = 0
+
+    for i, (speaker, text) in enumerate(episode["transcript"]):
+        word_count = len(text.split())
+        current_turns.append(f"**{speaker}:** {text}")
+        current_words += word_count
+
+        if current_words >= target_words:
+            speakers = list(
+                dict.fromkeys(
+                    s for s, _ in episode["transcript"][start_turn : i + 1]
+                )
+            )
+            chunks.append(
+                {
+                    "episode_number": episode_number,
+                    "episode_title": episode["title"],
+                    "pub_date": episode["pub_date"],
+                    "chunk_type": "transcript",
+                    "content": "\n\n".join(current_turns),
+                    "speakers": ", ".join(speakers),
+                    "start_turn": start_turn,
+                    "end_turn": i,
+                }
+            )
+            current_turns = []
+            current_words = 0
+            start_turn = i + 1
+
+    # Remaining turns
+    if current_turns:
+        speakers = list(
+            dict.fromkeys(
+                s
+                for s, _ in episode["transcript"][
+                    start_turn : len(episode["transcript"])
+                ]
+            )
+        )
+        chunks.append(
+            {
+                "episode_number": episode_number,
+                "episode_title": episode["title"],
+                "pub_date": episode["pub_date"],
+                "chunk_type": "transcript",
+                "content": "\n\n".join(current_turns),
+                "speakers": ", ".join(speakers),
+                "start_turn": start_turn,
+                "end_turn": len(episode["transcript"]) - 1,
+            }
+        )
+
+    return chunks
+
+
+def process_all_episodes(data_dir, output_path):
+    """Process all episodes and write chunks to JSONL."""
+    episode_dirs = sorted(
+        [
+            d
+            for d in os.listdir(data_dir)
+            if os.path.isdir(os.path.join(data_dir, d))
+            and d.isdigit()
+        ],
+        key=int,
+    )
+
+    total_chunks = 0
+    with open(output_path, "w", encoding="utf-8") as out:
+        for dirname in episode_dirs:
+            md_path = os.path.join(data_dir, dirname, "episode.md")
+            if not os.path.exists(md_path):
+                print(f"  Skipping {dirname}: no episode.md", file=sys.stderr)
+                continue
+
+            episode_number = int(dirname)
+            episode = parse_episode_md(md_path)
+
+            # Fall back to directory name for episode number
+            if episode["number"] is None:
+                episode["number"] = episode_number
+
+            chunks = []
+
+            synopsis = make_synopsis_chunk(episode, episode_number)
+            if synopsis:
+                chunks.append(synopsis)
+
+            links = make_link_chunk(episode, episode_number)
+            if links:
+                chunks.append(links)
+
+            chunks.extend(
+                make_transcript_chunks(episode, episode_number)
+            )
+
+            for chunk in chunks:
+                out.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+
+            total_chunks += len(chunks)
+            print(
+                f"  Episode {episode_number}: {len(chunks)} chunks",
+                file=sys.stderr,
+            )
+
+    print(f"\nTotal: {total_chunks} chunks written to {output_path}", file=sys.stderr)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Chunk podcast episodes for embedding")
+    parser.add_argument(
+        "--data-dir",
+        default="data/inputs",
+        help="Directory containing episode subdirectories",
+    )
+    parser.add_argument(
+        "--output",
+        default="build/chunks.jsonl",
+        help="Output JSONL file path",
+    )
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.data_dir):
+        print(f"Error: {args.data_dir} not found", file=sys.stderr)
+        sys.exit(1)
+
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    process_all_episodes(args.data_dir, args.output)
+
+
+if __name__ == "__main__":
+    main()
