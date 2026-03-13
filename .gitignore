@@ -15,5 +15,11 @@ venv/
 web/*.wasm
 web/sql-wasm.js
 
+# Session logs
+logs/
+
+# Misc
+next.txt
+
 # OS
 .DS_Store

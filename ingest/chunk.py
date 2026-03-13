@@ -102,11 +102,50 @@ def make_synopsis_chunk(episode, episode_number):
     }
 
 
-def make_link_chunk(episode, episode_number):
-    """Create a links chunk from parsed episode data."""
-    if not episode["links"]:
+def parse_shownotes(filepath):
+    """Parse shownotes.md into a dict mapping episode number to link lists.
+
+    Returns {episode_number: [{"text": ..., "url": ...}, ...]}.
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    shownotes = {}
+    # Split on episode headings: ## [Title](url)
+    entries = re.split(r"^## \[", content, flags=re.MULTILINE)
+
+    for entry in entries[1:]:  # skip preamble
+        # Extract episode number from title like "The Grey NATO – 363 – ..."
+        title_match = re.match(r"[^]]+", entry)
+        if not title_match:
+            continue
+        title = title_match.group(0)
+        num_match = re.search(r"(?:[–-]\s*(?:Ep(?:isode)?\s+)?|Ep\s+)(\d+)\b", title, re.IGNORECASE)
+        if not num_match:
+            continue
+        ep_num = int(num_match.group(1))
+
+        links = []
+        for link_match in re.finditer(r"^- \[([^\]]+)\]\(([^)]+)\)", entry, re.MULTILINE):
+            links.append({"text": link_match.group(1), "url": link_match.group(2)})
+
+        if links:
+            shownotes[ep_num] = links
+
+    return shownotes
+
+
+def make_link_chunk(episode, episode_number, shownotes=None):
+    """Create a links chunk, preferring shownotes links over episode.md links."""
+    links = None
+    if shownotes and episode_number in shownotes:
+        links = shownotes[episode_number]
+    elif episode["links"]:
+        links = episode["links"]
+
+    if not links:
         return None
-    lines = [f"- [{l['text']}]({l['url']})" for l in episode["links"]]
+    lines = [f"- [{l['text']}]({l['url']})" for l in links]
     content = f"Episode links for {episode['title']}:\n" + "\n".join(lines)
     return {
         "episode_number": episode_number,
@@ -185,6 +224,15 @@ def make_transcript_chunks(episode, episode_number, target_words=500):
 
 def process_all_episodes(data_dir, output_path):
     """Process all episodes and write chunks to JSONL."""
+    # Load shownotes for real content links
+    shownotes_path = os.path.join(data_dir, "shownotes.md")
+    shownotes = None
+    if os.path.exists(shownotes_path):
+        shownotes = parse_shownotes(shownotes_path)
+        print(f"Loaded shownotes: {len(shownotes)} episodes with links", file=sys.stderr)
+    else:
+        print("Warning: shownotes.md not found, using episode.md links", file=sys.stderr)
+
     episode_dirs = sorted(
         [
             d
@@ -216,7 +264,7 @@ def process_all_episodes(data_dir, output_path):
             if synopsis:
                 chunks.append(synopsis)
 
-            links = make_link_chunk(episode, episode_number)
+            links = make_link_chunk(episode, episode_number, shownotes)
             if links:
                 chunks.append(links)
 

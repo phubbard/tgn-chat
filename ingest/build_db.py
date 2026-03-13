@@ -45,12 +45,25 @@ def create_schema(conn, embedding_dim):
             end_turn INTEGER,
             metadata TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS chunks_emb (
+            chunk_id INTEGER PRIMARY KEY,
+            embedding BLOB NOT NULL
+        );
     """)
 
     conn.execute(f"""
         CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
             chunk_id INTEGER PRIMARY KEY,
             embedding FLOAT[{embedding_dim}]
+        );
+    """)
+
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+            content,
+            content_rowid='id',
+            tokenize='porter unicode61'
         );
     """)
 
@@ -145,10 +158,21 @@ def main():
             )
             chunk_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-            # Insert embedding
+            # Insert into FTS5 index
+            conn.execute(
+                "INSERT INTO chunks_fts (rowid, content) VALUES (?, ?)",
+                (chunk_id, chunk["content"]),
+            )
+
+            # Insert embedding into both vec0 (for native sqlite-vec) and
+            # regular table (for brute-force fallback in browsers without vec0)
             embedding_bytes = serialize_float32(chunk["embedding"])
             conn.execute(
                 "INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)",
+                (chunk_id, embedding_bytes),
+            )
+            conn.execute(
+                "INSERT INTO chunks_emb (chunk_id, embedding) VALUES (?, ?)",
                 (chunk_id, embedding_bytes),
             )
 

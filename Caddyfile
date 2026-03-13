@@ -2,9 +2,14 @@
 	handle /api/* {
 		reverse_proxy 127.0.0.1:11434
 	}
-	handle /build/* {
-		root * .
-		file_server
+	handle /search {
+		reverse_proxy 127.0.0.1:5555
+	}
+	handle /search/* {
+		reverse_proxy 127.0.0.1:5555
+	}
+	handle /log {
+		reverse_proxy 127.0.0.1:5555
 	}
 	handle {
 		root * web
