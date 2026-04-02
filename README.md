@@ -1,6 +1,8 @@
-# TGN Search
+# TGN Chatbot
 
-Self-hosted RAG chatbot over 363 episodes (10 years) of [The Grey NATO](https://thegreynato.com) podcast. Hybrid vector + keyword search across transcripts, synopses, and 7,663 curated episode links.
+Self-hosted RAG chatbot over 380 episodes (10 years) of [The Grey NATO](https://thegreynato.com) podcast. Hybrid vector + keyword search across transcripts, synopses, and 7,663 curated episode links.
+
+Live at [tgnchat.phfactor.net](https://tgnchat.phfactor.net/).
 
 ```
                         Browser (vanilla JS)
@@ -63,11 +65,11 @@ Each episode is split into three chunk types:
 # Python dependencies
 pip install -r ingest/requirements.txt
 
-# Build the database (requires Ollama with bge-m3)
-python ingest/chunk.py
-python ingest/embed.py --model bge-m3
-python ingest/build_db.py --model bge-m3
-cp build/podcast.bge-m3.db build/podcast.db
+# Sync episode data from the transcription server
+./ingest/sync.sh
+
+# Build (or incrementally rebuild) the database
+python ingest/rebuild.py --model bge-m3
 
 # Run
 python web/serve.py &        # search API on :5555
@@ -81,7 +83,9 @@ ingest/
   chunk.py          parse episodes into structured chunks
   embed.py          embed chunks via Ollama
   build_db.py       build SQLite DB with vectors + FTS5
+  rebuild.py        incremental rebuild (only re-embeds changed episodes)
   eval.py           compare retrieval across embedding models
+  sync.sh           rsync episode data from the transcription server
 web/
   index.html        chat UI (water.css, no build step)
   app.js            chat orchestration, Ollama streaming

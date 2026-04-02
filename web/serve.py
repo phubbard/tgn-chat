@@ -302,7 +302,7 @@ def main():
     args = parser.parse_args()
 
     init_db(args.db)
-    server = HTTPServer(("127.0.0.1", args.port), SearchHandler)
+    server = HTTPServer(("0.0.0.0", args.port), SearchHandler)
     print(f"Search API listening on http://127.0.0.1:{args.port}", file=sys.stderr)
     server.serve_forever()
 

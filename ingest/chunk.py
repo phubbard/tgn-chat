@@ -238,9 +238,9 @@ def process_all_episodes(data_dir, output_path):
             d
             for d in os.listdir(data_dir)
             if os.path.isdir(os.path.join(data_dir, d))
-            and d.isdigit()
+            and re.match(r"^\d+(\.\d+)?$", d)
         ],
-        key=int,
+        key=float,
     )
 
     total_chunks = 0
@@ -251,7 +251,7 @@ def process_all_episodes(data_dir, output_path):
                 print(f"  Skipping {dirname}: no episode.md", file=sys.stderr)
                 continue
 
-            episode_number = int(dirname)
+            episode_number = float(dirname) if "." in dirname else int(dirname)
             episode = parse_episode_md(md_path)
 
             # Fall back to directory name for episode number

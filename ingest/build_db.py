@@ -27,7 +27,7 @@ def create_schema(conn, embedding_dim):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS episodes (
             id INTEGER PRIMARY KEY,
-            number INTEGER UNIQUE NOT NULL,
+            number REAL UNIQUE NOT NULL,
             title TEXT NOT NULL,
             pub_date TEXT,
             synopsis TEXT,

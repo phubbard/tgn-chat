@@ -4,6 +4,7 @@ data/
 # Generated build artifacts
 build/*.db
 build/*.jsonl
+build/manifest.json
 
 # Python
 __pycache__/

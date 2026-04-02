@@ -92,6 +92,15 @@ function updateModelLink() {
   }
 })();
 
+// Sample query links
+document.querySelectorAll('.sample-query').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    queryInput.value = link.textContent;
+    form.requestSubmit();
+  });
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const query = queryInput.value.trim();

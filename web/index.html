@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TGN Search</title>
+  <title>TGN Chatbot</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
@@ -77,7 +77,27 @@
   </style>
 </head>
 <body>
-  <h1>The Grey NATO — Search</h1>
+  <h1>The Grey NATO — Chatbot</h1>
+  <details id="about">
+    <summary>About this chatbot</summary>
+    <p>
+      This chatbot searches across all 363 episodes of
+      <a href="https://thegreynato.com" target="_blank">The Grey NATO</a> podcast
+      using <strong>RAG</strong> (Retrieval-Augmented Generation). Your question is
+      matched against episode transcripts, synopses, and 7,663 curated shownotes links
+      using both vector similarity search and full-text keyword search. The best matching
+      excerpts are fed to a local LLM (running on <a href="https://ollama.com" target="_blank">Ollama</a>)
+      which generates a grounded answer with episode citations. All data comes from
+      transcripts produced by <a href="https://github.com/phubbard/tgn-whisperer" target="_blank">tgn-whisperer</a>.
+    </p>
+    <p>Try these sample queries:</p>
+    <ul>
+      <li><a href="#" class="sample-query">What do Jason and James think of Girard-Perregaux?</a></li>
+      <li><a href="#" class="sample-query">Which episodes feature guest appearances?</a></li>
+      <li><a href="#" class="sample-query">What are the best field watches discussed on the show?</a></li>
+      <li><a href="#" class="sample-query">Tell me about the trips to Japan</a></li>
+    </ul>
+  </details>
   <p id="status">Loading database...</p>
   <div id="model-bar">
     <label for="model-select">Model:</label>
