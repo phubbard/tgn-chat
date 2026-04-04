@@ -14,6 +14,27 @@ import re
 import sys
 
 
+HOSTS = {
+    "James Stacy", "Jason Heaton",
+    # Common WhisperX diarization artifacts for the hosts
+    "James Stacey", "James", "Jason", "Host", "Unknown",
+}
+
+# Speaker labels that are transcription artifacts, not people
+_ARTIFACT_PATTERNS = re.compile(
+    r"(?i)("
+    r"^sound\b|^music\b|^filler\b|^affirmative\b|^no label|^speaker response"
+    r"|^general agreement|^\[|^silence|^interviewer$|^co-host$"
+    r"|^unknown|^host$|^pause|^break"
+    r")"
+)
+
+
+def _is_artifact(name):
+    """Return True if a speaker label is a transcription artifact."""
+    return bool(_ARTIFACT_PATTERNS.search(name))
+
+
 def parse_episode_md(filepath):
     """Parse a single episode.md into its sections.
 
@@ -86,7 +107,22 @@ def parse_episode_md(filepath):
     return result
 
 
-def make_synopsis_chunk(episode, episode_number):
+def extract_guests(episode):
+    """Return sorted list of guest names from transcript speakers."""
+    if not episode["transcript"]:
+        return []
+    speakers = {s for s, _ in episode["transcript"]}
+    guests = sorted(
+        s for s in speakers - HOSTS
+        if not _is_artifact(s)
+        # Filter host name variants (e.g. "James Stacey (co-host)", "Jason Heaton (Host)")
+        and not any(h.split()[0] in s and ("host" in s.lower() or "co-host" in s.lower())
+                    for h in {"James Stacy", "Jason Heaton"})
+    )
+    return guests
+
+
+def make_synopsis_chunk(episode, episode_number, guests=None):
     """Create a synopsis chunk from parsed episode data."""
     if not episode["synopsis"]:
         return None
@@ -99,6 +135,7 @@ def make_synopsis_chunk(episode, episode_number):
         "speakers": None,
         "start_turn": None,
         "end_turn": None,
+        "guests": guests,
     }
 
 
@@ -135,7 +172,7 @@ def parse_shownotes(filepath):
     return shownotes
 
 
-def make_link_chunk(episode, episode_number, shownotes=None):
+def make_link_chunk(episode, episode_number, shownotes=None, guests=None):
     """Create a links chunk, preferring shownotes links over episode.md links."""
     links = None
     if shownotes and episode_number in shownotes:
@@ -156,10 +193,11 @@ def make_link_chunk(episode, episode_number, shownotes=None):
         "speakers": None,
         "start_turn": None,
         "end_turn": None,
+        "guests": guests,
     }
 
 
-def make_transcript_chunks(episode, episode_number, target_words=500):
+def make_transcript_chunks(episode, episode_number, target_words=500, guests=None):
     """Group consecutive speaker turns into chunks of ~target_words words."""
     if not episode["transcript"]:
         return []
@@ -190,6 +228,7 @@ def make_transcript_chunks(episode, episode_number, target_words=500):
                     "speakers": ", ".join(speakers),
                     "start_turn": start_turn,
                     "end_turn": i,
+                    "guests": guests,
                 }
             )
             current_turns = []
@@ -216,6 +255,7 @@ def make_transcript_chunks(episode, episode_number, target_words=500):
                 "speakers": ", ".join(speakers),
                 "start_turn": start_turn,
                 "end_turn": len(episode["transcript"]) - 1,
+                "guests": guests,
             }
         )
 
@@ -258,18 +298,19 @@ def process_all_episodes(data_dir, output_path):
             if episode["number"] is None:
                 episode["number"] = episode_number
 
+            guests = extract_guests(episode) or None
             chunks = []
 
-            synopsis = make_synopsis_chunk(episode, episode_number)
+            synopsis = make_synopsis_chunk(episode, episode_number, guests)
             if synopsis:
                 chunks.append(synopsis)
 
-            links = make_link_chunk(episode, episode_number, shownotes)
+            links = make_link_chunk(episode, episode_number, shownotes, guests)
             if links:
                 chunks.append(links)
 
             chunks.extend(
-                make_transcript_chunks(episode, episode_number)
+                make_transcript_chunks(episode, episode_number, guests=guests)
             )
 
             for chunk in chunks:

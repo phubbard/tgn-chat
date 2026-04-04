@@ -20,6 +20,7 @@ import time
 from chunk import (
     parse_episode_md,
     parse_shownotes,
+    extract_guests,
     make_synopsis_chunk,
     make_link_chunk,
     make_transcript_chunks,
@@ -103,14 +104,15 @@ def chunk_episode(ep_num_str, data_dir, shownotes):
     if episode["number"] is None:
         episode["number"] = episode_number
 
+    guests = extract_guests(episode) or None
     chunks = []
-    synopsis = make_synopsis_chunk(episode, episode_number)
+    synopsis = make_synopsis_chunk(episode, episode_number, guests)
     if synopsis:
         chunks.append(synopsis)
-    links = make_link_chunk(episode, episode_number, shownotes)
+    links = make_link_chunk(episode, episode_number, shownotes, guests)
     if links:
         chunks.append(links)
-    chunks.extend(make_transcript_chunks(episode, episode_number))
+    chunks.extend(make_transcript_chunks(episode, episode_number, guests=guests))
     return chunks
 
 
@@ -252,9 +254,10 @@ def main():
                         episode_url = ep_meta.get("episode_url")
 
                 synopsis = chunk["content"] if chunk["chunk_type"] == "synopsis" else None
+                guests = json.dumps(chunk["guests"]) if chunk.get("guests") else None
                 conn.execute(
-                    "INSERT OR IGNORE INTO episodes (number, title, pub_date, synopsis, mp3_url, episode_url) VALUES (?, ?, ?, ?, ?, ?)",
-                    (ep_num, chunk["episode_title"], chunk["pub_date"], synopsis, mp3_url, episode_url),
+                    "INSERT OR IGNORE INTO episodes (number, title, pub_date, synopsis, mp3_url, episode_url, guests) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (ep_num, chunk["episode_title"], chunk["pub_date"], synopsis, mp3_url, episode_url, guests),
                 )
                 episodes_seen[ep_num] = conn.execute(
                     "SELECT id FROM episodes WHERE number = ?", (ep_num,)

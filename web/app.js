@@ -148,7 +148,8 @@ function appendMessage(role, content) {
 function buildContext(results) {
   const parts = [];
   for (const r of results) {
-    const header = `[Episode ${r.episode_number}: ${r.episode_title}]`;
+    const date = r.pub_date ? `, ${r.pub_date}` : '';
+    const header = `[Episode ${r.episode_number}: ${r.episode_title}${date}]`;
     const speakers = r.speakers ? ` (${r.speakers})` : '';
     parts.push(`${header}${speakers}\n${r.content}`);
   }
@@ -182,14 +183,14 @@ function buildSourcesHTML(results) {
 async function generateResponse(query, searchResults, searchMs = 0) {
   const context = buildContext(searchResults);
 
-  const systemPrompt = `You are a knowledgeable assistant for The Grey NATO (TGN) podcast, hosted by James Stacy and Jason Heaton, covering watches, gear, travel, and adventure over 363 episodes.
+  const systemPrompt = `You are a knowledgeable assistant for The Grey NATO (TGN) podcast, hosted by James Stacy and Jason Heaton, covering watches, gear, travel, and adventure over 380 episodes since 2016.
 
 Instructions:
 - Give detailed, thorough answers. Include specific quotes, names, and details from the transcripts.
-- Cite episode numbers inline (e.g. "In Episode 206, Jason mentioned...").
+- Cite episode numbers and dates inline (e.g. "In Episode 206 (March 2021), Jason mentioned...").
 - When multiple episodes are relevant, discuss each one and explain the context.
 - Include direct quotes from the hosts when they add color or specificity.
-- If the retrieved context doesn't cover the topic well, say so briefly — but do NOT speculate about which episodes are or aren't in the database. The full archive of all 363 episodes is searchable; you simply receive the most relevant excerpts.
+- If the retrieved context doesn't cover the topic well, say so briefly — but do NOT speculate about which episodes are or aren't in the database. The full archive of all 380 episodes is searchable; you simply receive the most relevant excerpts.
 
 Retrieved context:
 ${context}`;
@@ -262,14 +263,30 @@ ${context}`;
     statsHTML = `<div class="gen-stats">~${tokenCount} tokens in ${elapsed.toFixed(1)}s · ${getChatModel()}</div>`;
   }
 
-  // Add sources and stats
-  msgDiv.innerHTML = marked.parse(fullResponse) + buildSourcesHTML(searchResults) + statsHTML;
+  // Add sources, stats, and feedback buttons
+  const queryId = crypto.randomUUID().slice(0, 8);
+  const feedbackHTML = `<span class="feedback" data-query-id="${queryId}">` +
+    `<button data-vote="up" title="Good response">&#x1f44d;</button>` +
+    `<button data-vote="down" title="Poor response">&#x1f44e;</button></span>`;
+  msgDiv.innerHTML = marked.parse(fullResponse) + buildSourcesHTML(searchResults) + statsHTML + feedbackHTML;
+
+  // Wire up feedback buttons
+  msgDiv.querySelectorAll('.feedback button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const vote = btn.dataset.vote;
+      msgDiv.querySelectorAll('.feedback button').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      logEvent({ type: 'feedback', query_id: queryId, vote, query, model: getChatModel() });
+    });
+  });
+
   chat.scrollTop = chat.scrollHeight;
 
   // Log the interaction
   const sourceEps = [...new Set(searchResults.map(r => r.episode_number))];
   logEvent({
     type: 'query',
+    query_id: queryId,
     model: getChatModel(),
     query,
     response: fullResponse,

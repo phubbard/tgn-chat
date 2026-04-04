@@ -60,6 +60,28 @@
       opacity: 0.5;
       margin-top: 0.5em;
     }
+    .feedback {
+      display: inline-flex;
+      gap: 0.3em;
+      margin-left: 1em;
+    }
+    .feedback button {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0.1em 0.4em;
+      font-size: 0.85em;
+      opacity: 0.6;
+      margin: 0;
+    }
+    .feedback button:hover {
+      opacity: 1;
+    }
+    .feedback button.selected {
+      opacity: 1;
+      border-color: var(--links);
+    }
     #model-bar {
       display: flex;
       align-items: center;

@@ -32,7 +32,8 @@ def create_schema(conn, embedding_dim):
             pub_date TEXT,
             synopsis TEXT,
             mp3_url TEXT,
-            episode_url TEXT
+            episode_url TEXT,
+            guests TEXT
         );
 
         CREATE TABLE IF NOT EXISTS chunks (
@@ -128,13 +129,14 @@ def main():
                         episode_url = ep_meta.get("episode_url")
 
                 synopsis = chunk["content"] if chunk["chunk_type"] == "synopsis" else None
+                guests = json.dumps(chunk["guests"]) if chunk.get("guests") else None
 
                 conn.execute(
                     """INSERT OR IGNORE INTO episodes
-                       (number, title, pub_date, synopsis, mp3_url, episode_url)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                       (number, title, pub_date, synopsis, mp3_url, episode_url, guests)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (ep_num, chunk["episode_title"], chunk["pub_date"],
-                     synopsis, mp3_url, episode_url),
+                     synopsis, mp3_url, episode_url, guests),
                 )
 
                 episodes_seen[ep_num] = conn.execute(

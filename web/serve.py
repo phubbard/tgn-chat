@@ -82,7 +82,7 @@ def search_vec(query_vec, top_k):
     rows = db.execute("""
         SELECT
             c.content, c.chunk_type, c.speakers,
-            e.number, e.title, e.episode_url,
+            e.number, e.title, e.episode_url, e.pub_date,
             v.distance
         FROM chunks_vec v
         JOIN chunks c ON c.id = v.chunk_id
@@ -95,7 +95,7 @@ def search_vec(query_vec, top_k):
         {
             "content": r[0], "chunk_type": r[1], "speakers": r[2],
             "episode_number": r[3], "episode_title": r[4],
-            "episode_url": r[5], "distance": r[6],
+            "episode_url": r[5], "pub_date": r[6], "distance": r[7],
         }
         for r in rows
     ]
@@ -113,7 +113,7 @@ def search_fts(query_text, top_k):
         rows = db.execute("""
             SELECT
                 c.content, c.chunk_type, c.speakers,
-                e.number, e.title, e.episode_url,
+                e.number, e.title, e.episode_url, e.pub_date,
                 chunks_fts.rank
             FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
@@ -127,7 +127,8 @@ def search_fts(query_text, top_k):
             {
                 "content": r[0], "chunk_type": r[1], "speakers": r[2],
                 "episode_number": r[3], "episode_title": r[4],
-                "episode_url": r[5], "distance": 0, "fts": True,
+                "episode_url": r[5], "pub_date": r[6],
+                "distance": 0, "fts": True,
             }
             for r in rows
         ]
@@ -202,7 +203,9 @@ def write_log(session_id, event):
             return  # Header already written above
 
         if event_type == "query":
-            f.write(f"## {ts} — Query\n\n")
+            query_id = event.get("query_id", "")
+            qid_suffix = f" ({query_id})" if query_id else ""
+            f.write(f"## {ts} — Query{qid_suffix}\n\n")
             f.write(f"**Model:** {event.get('model', '?')}\n\n")
             f.write(f"**Query:** {event.get('query', '')}\n\n")
 
@@ -238,6 +241,14 @@ def write_log(session_id, event):
                 f.write("\n")
 
             f.write("---\n\n")
+
+        elif event_type == "feedback":
+            vote = event.get("vote", "?")
+            icon = "\U0001f44d" if vote == "up" else "\U0001f44e"
+            query_id = event.get("query_id", "?")
+            f.write(f"### {ts} — Feedback {icon} (query {query_id})\n\n")
+            f.write(f"**Query:** {event.get('query', '')}\n")
+            f.write(f"**Model:** {event.get('model', '?')}\n\n---\n\n")
 
         elif event_type == "error":
             f.write(f"## {ts} — Error\n\n")
