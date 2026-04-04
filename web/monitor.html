@@ -146,11 +146,16 @@
       return el.innerHTML;
     }
 
-    async function poll() {
+    async function poll(loadHistory = false) {
       try {
-        const url = lastTimestamp
-          ? `/monitor/events?since=${encodeURIComponent(lastTimestamp)}`
-          : '/monitor/events';
+        let url;
+        if (loadHistory && !lastTimestamp) {
+          url = '/monitor/events?history=1';
+        } else if (lastTimestamp) {
+          url = `/monitor/events?since=${encodeURIComponent(lastTimestamp)}`;
+        } else {
+          url = '/monitor/events';
+        }
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(resp.status);
         const data = await resp.json();
@@ -181,8 +186,8 @@
       }
     });
 
-    poll();
-    setInterval(poll, POLL_INTERVAL);
+    poll(true);  // Load full history on startup
+    setInterval(() => poll(false), POLL_INTERVAL);
   </script>
 </body>
 </html>

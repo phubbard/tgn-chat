@@ -186,17 +186,41 @@ _events_lock = threading.Lock()
 _recent_events = collections.deque(maxlen=200)
 
 
+EVENTS_JSONL = os.path.join(LOG_DIR, "events.jsonl")
+
+
+def _load_events_from_disk():
+    """Load all events from the JSONL log file."""
+    if not os.path.exists(EVENTS_JSONL):
+        return []
+    events = []
+    with open(EVENTS_JSONL, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    return events
+
+
 def write_log(session_id, event):
-    """Append a log event to the session's markdown file."""
+    """Append a log event to the session's markdown file and JSONL log."""
+    enriched = {
+        "session_id": session_id,
+        "timestamp": datetime.now().isoformat(),
+        **event,
+    }
+
     # Store in memory for dashboard
     with _events_lock:
-        _recent_events.append({
-            "session_id": session_id,
-            "timestamp": datetime.now().isoformat(),
-            **event,
-        })
+        _recent_events.append(enriched)
 
+    # Append to structured JSONL log
     os.makedirs(LOG_DIR, exist_ok=True)
+    with open(EVENTS_JSONL, "a", encoding="utf-8") as f:
+        f.write(json.dumps(enriched, ensure_ascii=False) + "\n")
     # Use first 8 chars of UUID for filename readability
     short_id = session_id[:8]
     now = datetime.now()
@@ -307,12 +331,19 @@ class SearchHandler(BaseHTTPRequestHandler):
         if self.path == "/search/info":
             self._json_response(200, get_db_info())
         elif self.path.startswith("/monitor/events"):
-            # Return recent events, optionally filtered by ?since=<iso-timestamp>
             from urllib.parse import urlparse, parse_qs
             qs = parse_qs(urlparse(self.path).query)
             since = qs.get("since", [None])[0]
-            with _events_lock:
-                events = list(_recent_events)
+            history = qs.get("history", ["0"])[0] == "1"
+
+            if history and not since:
+                # Load full history from disk
+                events = _load_events_from_disk()
+            else:
+                # Use in-memory buffer for live polling
+                with _events_lock:
+                    events = list(_recent_events)
+
             if since:
                 events = [e for e in events if e["timestamp"] > since]
             self._json_response(200, {"events": events})
