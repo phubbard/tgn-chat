@@ -151,7 +151,8 @@ function buildContext(results) {
     const date = r.pub_date ? `, ${r.pub_date}` : '';
     const header = `[Episode ${r.episode_number}: ${r.episode_title}${date}]`;
     const speakers = r.speakers ? ` (${r.speakers})` : '';
-    parts.push(`${header}${speakers}\n${r.content}`);
+    const topics = r.topics ? `\nTopics: ${JSON.parse(r.topics).join(', ')}` : '';
+    parts.push(`${header}${speakers}${topics}\n${r.content}`);
   }
   return parts.join('\n\n---\n\n');
 }

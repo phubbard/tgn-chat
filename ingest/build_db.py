@@ -33,7 +33,8 @@ def create_schema(conn, embedding_dim):
             synopsis TEXT,
             mp3_url TEXT,
             episode_url TEXT,
-            guests TEXT
+            guests TEXT,
+            topics TEXT
         );
 
         CREATE TABLE IF NOT EXISTS chunks (
