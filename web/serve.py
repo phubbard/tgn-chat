@@ -178,9 +178,24 @@ def get_db_info():
 
 LOG_DIR = "logs"
 
+# In-memory ring buffer of recent events for the monitoring dashboard
+import collections
+import threading
+
+_events_lock = threading.Lock()
+_recent_events = collections.deque(maxlen=200)
+
 
 def write_log(session_id, event):
     """Append a log event to the session's markdown file."""
+    # Store in memory for dashboard
+    with _events_lock:
+        _recent_events.append({
+            "session_id": session_id,
+            "timestamp": datetime.now().isoformat(),
+            **event,
+        })
+
     os.makedirs(LOG_DIR, exist_ok=True)
     # Use first 8 chars of UUID for filename readability
     short_id = session_id[:8]
@@ -291,7 +306,31 @@ class SearchHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/search/info":
             self._json_response(200, get_db_info())
+        elif self.path.startswith("/monitor/events"):
+            # Return recent events, optionally filtered by ?since=<iso-timestamp>
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            since = qs.get("since", [None])[0]
+            with _events_lock:
+                events = list(_recent_events)
+            if since:
+                events = [e for e in events if e["timestamp"] > since]
+            self._json_response(200, {"events": events})
+        elif self.path == "/monitor":
+            self._serve_file("web/monitor.html", "text/html")
         else:
+            self._json_response(404, {"error": "not found"})
+
+    def _serve_file(self, path, content_type):
+        try:
+            with open(path, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", len(body))
+            self.end_headers()
+            self.wfile.write(body)
+        except FileNotFoundError:
             self._json_response(404, {"error": "not found"})
 
     def _json_response(self, status, data):

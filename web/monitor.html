@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TGN Monitor</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+  <style>
+    body { max-width: 960px; }
+    .event { border-left: 3px solid var(--border); padding: 0.5em 1em; margin-bottom: 1em; }
+    .event.query { border-left-color: var(--links); }
+    .event.feedback-up { border-left-color: #4a4; }
+    .event.feedback-down { border-left-color: #c44; }
+    .event.error { border-left-color: #c44; background: rgba(204,68,68,0.05); }
+    .event.session_start { border-left-color: #888; opacity: 0.6; }
+    .event-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1em; }
+    .event-header .type { font-weight: bold; }
+    .event-header .time { font-size: 0.8em; opacity: 0.6; white-space: nowrap; }
+    .event-header .session { font-size: 0.75em; opacity: 0.5; font-family: monospace; }
+    .meta { font-size: 0.85em; opacity: 0.7; margin: 0.25em 0; }
+    .query-text { font-size: 1.1em; margin: 0.5em 0; }
+    .response { font-size: 0.9em; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 0.5em; border-radius: 4px; margin: 0.5em 0; white-space: pre-wrap; }
+    .stats-bar { display: flex; gap: 1.5em; font-size: 0.85em; opacity: 0.7; flex-wrap: wrap; }
+    .stats-bar span { white-space: nowrap; }
+    #controls { display: flex; align-items: center; gap: 1em; margin-bottom: 1em; }
+    #controls label { font-size: 0.85em; }
+    #status { font-size: 0.85em; opacity: 0.6; }
+    .summary { display: flex; gap: 2em; margin-bottom: 1em; padding: 0.5em; background: var(--background-alt); border-radius: 4px; flex-wrap: wrap; }
+    .summary .stat { text-align: center; }
+    .summary .stat .value { font-size: 1.5em; font-weight: bold; }
+    .summary .stat .label { font-size: 0.8em; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <h1>TGN Monitor</h1>
+
+  <div class="summary" id="summary">
+    <div class="stat"><div class="value" id="s-sessions">0</div><div class="label">Sessions</div></div>
+    <div class="stat"><div class="value" id="s-queries">0</div><div class="label">Queries</div></div>
+    <div class="stat"><div class="value" id="s-thumbsup">0</div><div class="label">Thumbs Up</div></div>
+    <div class="stat"><div class="value" id="s-thumbsdown">0</div><div class="label">Thumbs Down</div></div>
+    <div class="stat"><div class="value" id="s-errors">0</div><div class="label">Errors</div></div>
+  </div>
+
+  <div id="controls">
+    <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll</label>
+    <label><input type="checkbox" id="show-sessions"> Show session starts</label>
+    <span id="status">Connecting...</span>
+  </div>
+
+  <div id="events"></div>
+
+  <script>
+    const eventsDiv = document.getElementById('events');
+    const statusEl = document.getElementById('status');
+    const autoScroll = document.getElementById('auto-scroll');
+    const showSessions = document.getElementById('show-sessions');
+
+    let lastTimestamp = null;
+    let allEvents = [];
+    const POLL_INTERVAL = 3000;
+
+    function formatTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleTimeString();
+    }
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+    }
+
+    function updateSummary() {
+      const sessions = new Set(allEvents.map(e => e.session_id)).size;
+      const queries = allEvents.filter(e => e.type === 'query').length;
+      const up = allEvents.filter(e => e.type === 'feedback' && e.vote === 'up').length;
+      const down = allEvents.filter(e => e.type === 'feedback' && e.vote === 'down').length;
+      const errors = allEvents.filter(e => e.type === 'error').length;
+
+      document.getElementById('s-sessions').textContent = sessions;
+      document.getElementById('s-queries').textContent = queries;
+      document.getElementById('s-thumbsup').textContent = up;
+      document.getElementById('s-thumbsdown').textContent = down;
+      document.getElementById('s-errors').textContent = errors;
+    }
+
+    function renderEvent(event) {
+      const type = event.type || 'unknown';
+
+      if (type === 'session_start' && !showSessions.checked) return null;
+
+      const div = document.createElement('div');
+      let className = `event ${type}`;
+      if (type === 'feedback') className += event.vote === 'up' ? ' feedback-up' : ' feedback-down';
+      div.className = className;
+
+      const header = `<div class="event-header">
+        <span class="type">${type === 'feedback' ? (event.vote === 'up' ? '\u{1f44d}' : '\u{1f44e}') + ' Feedback' : type}</span>
+        <span class="session">${(event.session_id || '').slice(0, 8)}</span>
+        <span class="time">${formatDate(event.timestamp)}</span>
+      </div>`;
+
+      let body = '';
+
+      if (type === 'session_start') {
+        const ua = event.user_agent || '';
+        // Show just browser/OS
+        const short = ua.match(/(?:Chrome|Firefox|Safari|Edge)\/[\d.]+/) || [ua.slice(0, 60)];
+        body = `<div class="meta">${short[0]}</div>`;
+      }
+
+      if (type === 'query') {
+        body += `<div class="query-text"><strong>Q:</strong> ${escapeHtml(event.query || '')}</div>`;
+        body += `<div class="meta"><strong>Model:</strong> ${event.model || '?'}</div>`;
+
+        const stats = [];
+        if (event.search_time_s != null) stats.push(`<span>Search: ${event.search_time_s}s</span>`);
+        if (event.ttft_s != null) stats.push(`<span>TTFT: ${event.ttft_s}s</span>`);
+        if (event.total_time_s != null) stats.push(`<span>Total: ${event.total_time_s}s</span>`);
+        if (event.tokens != null) stats.push(`<span>${event.tokens} tokens</span>`);
+        if (event.tok_per_sec != null) stats.push(`<span>${event.tok_per_sec} tok/s</span>`);
+        if (event.source_episodes) stats.push(`<span>Episodes: ${event.source_episodes.join(', ')}</span>`);
+        if (stats.length) body += `<div class="stats-bar">${stats.join('')}</div>`;
+
+        if (event.response) {
+          body += `<div class="response">${escapeHtml(event.response)}</div>`;
+        }
+      }
+
+      if (type === 'feedback') {
+        body += `<div class="query-text"><strong>Q:</strong> ${escapeHtml(event.query || '')}</div>`;
+        body += `<div class="meta"><strong>Model:</strong> ${event.model || '?'} &middot; Query ID: ${event.query_id || '?'}</div>`;
+      }
+
+      if (type === 'error') {
+        body += `<div class="response" style="color: #c44;">${escapeHtml(event.error || '')}</div>`;
+      }
+
+      div.innerHTML = header + body;
+      return div;
+    }
+
+    function escapeHtml(text) {
+      const el = document.createElement('span');
+      el.textContent = text;
+      return el.innerHTML;
+    }
+
+    async function poll() {
+      try {
+        const url = lastTimestamp
+          ? `/monitor/events?since=${encodeURIComponent(lastTimestamp)}`
+          : '/monitor/events';
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(resp.status);
+        const data = await resp.json();
+
+        if (data.events.length > 0) {
+          for (const event of data.events) {
+            allEvents.push(event);
+            const el = renderEvent(event);
+            if (el) eventsDiv.appendChild(el);
+          }
+          lastTimestamp = data.events[data.events.length - 1].timestamp;
+          updateSummary();
+          if (autoScroll.checked) window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        statusEl.textContent = `Last poll: ${new Date().toLocaleTimeString()} \u2014 ${allEvents.length} events`;
+      } catch (e) {
+        statusEl.textContent = `Error: ${e.message}`;
+      }
+    }
+
+    // Re-render when toggling session visibility
+    showSessions.addEventListener('change', () => {
+      eventsDiv.innerHTML = '';
+      for (const event of allEvents) {
+        const el = renderEvent(event);
+        if (el) eventsDiv.appendChild(el);
+      }
+    });
+
+    poll();
+    setInterval(poll, POLL_INTERVAL);
+  </script>
+</body>
+</html>
