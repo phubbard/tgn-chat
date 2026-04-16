@@ -1,13 +1,14 @@
 /**
- * app.js — Chat UI and Ollama streaming
+ * app.js — Chat UI and LM Studio streaming (OpenAI-compatible API)
  *
  * Orchestrates: user query -> embedding -> vector search -> LLM generation
  */
 
-const CHAT_URL = '/api/chat';
-const DEFAULT_MODEL = 'gpt-oss:120b';
-// Embedding models to exclude from the chat model dropdown
-const EMBED_MODELS = ['bge-m3', 'mxbai-embed-large', 'nomic-embed-text', 'all-minilm', 'snowflake-arctic-embed'];
+const CHAT_URL = '/v1/chat/completions';
+const MODELS_URL = '/v1/models';
+const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+// Embedding model name fragments to exclude from the chat model dropdown
+const EMBED_MODELS = ['bge-m3', 'mxbai-embed', 'nomic-embed', 'all-minilm', 'snowflake-arctic-embed', 'embedding'];
 
 const chat = document.getElementById('chat');
 const form = document.getElementById('ask-form');
@@ -36,8 +37,8 @@ function getChatModel() {
 }
 
 function updateModelLink() {
-  const model = getChatModel().split(':')[0];
-  modelLink.href = `https://ollama.com/library/${model}`;
+  const model = getChatModel();
+  modelLink.href = `https://huggingface.co/models?search=${encodeURIComponent(model)}`;
 }
 
 // Initialize on load
@@ -46,19 +47,19 @@ function updateModelLink() {
     const info = await initDB();
     status.textContent = `Loaded: ${info.episodes} episodes, ${info.chunks} chunks (embed: ${info.model})`;
 
-    // Populate model dropdown from Ollama
+    // Populate model dropdown from LM Studio
     try {
-      const resp = await fetch('/api/tags');
+      const resp = await fetch(MODELS_URL);
       const data = await resp.json();
-      const models = data.models
-        .map(m => m.name)
-        .filter(n => !EMBED_MODELS.some(e => n.startsWith(e)))
+      const models = (data.data || [])
+        .map(m => m.id)
+        .filter(n => !EMBED_MODELS.some(e => n.toLowerCase().includes(e)))
         .sort();
       for (const name of models) {
         const opt = document.createElement('option');
         opt.value = name;
         opt.textContent = name;
-        if (name === DEFAULT_MODEL || name.startsWith(DEFAULT_MODEL + ':')) opt.selected = true;
+        if (name === DEFAULT_MODEL) opt.selected = true;
         modelSelect.appendChild(opt);
       }
     } catch (e) {
@@ -70,19 +71,7 @@ function updateModelLink() {
     }
 
     modelSelect.disabled = false;
-    modelSelect.addEventListener('change', () => {
-      // Unload the previous model to free VRAM for the new one + embedding model
-      const prev = modelSelect._prevModel;
-      if (prev && prev !== getChatModel()) {
-        fetch('/api/generate', {
-          method: 'POST',
-          body: JSON.stringify({ model: prev, keep_alive: 0 }),
-        }).catch(() => {});
-      }
-      modelSelect._prevModel = getChatModel();
-      updateModelLink();
-    });
-    modelSelect._prevModel = getChatModel();
+    modelSelect.addEventListener('change', updateModelLink);
     updateModelLink();
     queryInput.disabled = false;
     submitBtn.disabled = false;
@@ -209,42 +198,80 @@ ${context}`;
       model: getChatModel(),
       messages: messages,
       stream: true,
+      stream_options: { include_usage: true },
     }),
   });
 
   if (!resp.ok) throw new Error(`Chat API error: ${resp.status}`);
 
   const msgDiv = appendMessage('assistant', '');
+  const reasoningDiv = document.createElement('details');
+  reasoningDiv.className = 'reasoning';
+  reasoningDiv.innerHTML = '<summary>Thinking...</summary><div class="reasoning-body"></div>';
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'answer';
+  msgDiv.appendChild(reasoningDiv);
+  msgDiv.appendChild(contentDiv);
+  const reasoningBody = reasoningDiv.querySelector('.reasoning-body');
+
   let fullResponse = '';
-  let tokenStats = null;
+  let reasoningText = '';
+  let usage = null;
   let firstTokenTime = null;
   const startTime = performance.now();
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
-    const text = decoder.decode(value, { stream: true });
-    for (const line of text.split('\n')) {
-      if (!line.trim()) continue;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line || !line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (payload === '[DONE]') continue;
+      let data;
       try {
-        const data = JSON.parse(line);
-        if (data.message?.content) {
-          if (!firstTokenTime) firstTokenTime = performance.now();
-          fullResponse += data.message.content;
-          msgDiv.innerHTML = marked.parse(fullResponse);
-          chat.scrollTop = chat.scrollHeight;
-        }
-        if (data.done && data.eval_count) {
-          tokenStats = data;
-        }
+        data = JSON.parse(payload);
       } catch (e) {
-        // Partial JSON line, ignore
+        continue;  // Partial JSON, ignore
+      }
+      if (data.error) {
+        const msg = data.error.message || JSON.stringify(data.error);
+        throw new Error(`LM Studio: ${msg}`);
+      }
+      const delta = data.choices?.[0]?.delta || {};
+      const reasoningChunk = delta.reasoning ?? delta.reasoning_content;
+      if (reasoningChunk) {
+        if (!firstTokenTime) firstTokenTime = performance.now();
+        reasoningText += reasoningChunk;
+        reasoningBody.textContent = reasoningText;
+        chat.scrollTop = chat.scrollHeight;
+      }
+      if (delta.content) {
+        if (!firstTokenTime) firstTokenTime = performance.now();
+        fullResponse += delta.content;
+        contentDiv.innerHTML = marked.parse(fullResponse);
+        chat.scrollTop = chat.scrollHeight;
+      }
+      if (data.usage) {
+        usage = data.usage;
       }
     }
+  }
+
+  if (reasoningText) {
+    reasoningDiv.querySelector('summary').textContent = 'Thinking';
+  } else {
+    reasoningDiv.remove();
   }
 
   const elapsed = (performance.now() - startTime) / 1000;
@@ -254,9 +281,9 @@ ${context}`;
   let statsHTML = '';
   let tokPerSec = null;
   let tokenCount = null;
-  if (tokenStats) {
-    tokPerSec = parseFloat((tokenStats.eval_count / (tokenStats.eval_duration / 1e9)).toFixed(1));
-    tokenCount = tokenStats.eval_count;
+  if (usage && usage.completion_tokens) {
+    tokenCount = usage.completion_tokens;
+    tokPerSec = parseFloat((tokenCount / elapsed).toFixed(1));
     statsHTML = `<div class="gen-stats">${tokenCount} tokens in ${elapsed.toFixed(1)}s (${tokPerSec} tok/s) · ${getChatModel()}</div>`;
   } else {
     const wordCount = fullResponse.split(/\s+/).length;
@@ -269,7 +296,9 @@ ${context}`;
   const feedbackHTML = `<span class="feedback" data-query-id="${queryId}">` +
     `<button data-vote="up" title="Good response">&#x1f44d;</button>` +
     `<button data-vote="down" title="Poor response">&#x1f44e;</button></span>`;
-  msgDiv.innerHTML = marked.parse(fullResponse) + buildSourcesHTML(searchResults) + statsHTML + feedbackHTML;
+  const trailer = document.createElement('div');
+  trailer.innerHTML = buildSourcesHTML(searchResults) + statsHTML + feedbackHTML;
+  msgDiv.appendChild(trailer);
 
   // Wire up feedback buttons
   msgDiv.querySelectorAll('.feedback button').forEach(btn => {

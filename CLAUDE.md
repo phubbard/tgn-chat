@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Self-hosted RAG chatbot over 363 episodes (10 years) of The Grey NATO podcast. Transcripts with speaker attribution, synopses, and 7,663 curated episode links form the knowledge base. The goal is maximum client-side execution: the browser does vector search via WASM, Ollama handles only embedding and generation.
+Self-hosted RAG chatbot over 363 episodes (10 years) of The Grey NATO podcast. Transcripts with speaker attribution, synopses, and 7,663 curated episode links form the knowledge base. The goal is maximum client-side execution: the browser does vector search via WASM, LM Studio handles only embedding and generation.
 
 ## Architecture
 
@@ -15,9 +15,9 @@ data/inputs/{n}/episode.md   -->  ingest pipeline  -->  build/podcast.{model}.db
                                                               |
                                               browser loads via sql.js + sqlite-vec WASM
                                                               |
-                                          user query -> Ollama /api/embed -> vector search
+                                          user query -> LM Studio /v1/embeddings -> vector search
                                                               |
-                                          retrieved chunks -> Ollama /api/chat -> streamed response
+                                          retrieved chunks -> LM Studio /v1/chat/completions -> streamed response
 ```
 
 **Client-side (browser via WASM + static files):**
@@ -25,10 +25,10 @@ data/inputs/{n}/episode.md   -->  ingest pipeline  -->  build/podcast.{model}.db
 - Entire chunked corpus + pre-computed embeddings as a static `.db` file
 - All UI, retrieval, and chat orchestration logic
 
-**Server-side (Ollama on Mac Studio, localhost:11434):**
-- Query embedding via `/api/embed` (convert user question to vector)
-- LLM generation via `/api/chat` (generate response from retrieved context)
-- Caddy reverse-proxies `/api/*` to Ollama so LAN clients work without Ollama binding `0.0.0.0` (Ollama updates regularly reset this)
+**Server-side (LM Studio on Mac Studio, localhost:1234):**
+- Query embedding via `/v1/embeddings` (convert user question to vector)
+- LLM generation via `/v1/chat/completions` (generate streamed response from retrieved context)
+- Caddy reverse-proxies `/v1/*` to LM Studio so LAN clients work without LM Studio binding `0.0.0.0`
 
 ## Data Format
 
@@ -74,7 +74,7 @@ build/
   podcast.all-minilm.db
 ```
 
-Candidate models (all available in Ollama):
+Candidate models (all loadable in LM Studio via Hugging Face):
 - **`bge-m3`** — Dense + sparse retrieval, good for proper nouns (watch names, people)
 - **`nomic-embed-text`** — 768-dim, strong general-purpose
 - **`all-minilm`** — 384-dim, smallest/fastest, good baseline
@@ -123,7 +123,7 @@ CREATE VIRTUAL TABLE chunks_vec USING vec0(
 ```
 rag-exploration/
   CLAUDE.md
-  Caddyfile                # static files + Ollama reverse proxy
+  Caddyfile                # static files + LM Studio reverse proxy
   data/                    # NOT in git — manually copied to server
     inputs/{n}/            # source episode data
     site/{n}/              # Zensical-rendered HTML
@@ -131,12 +131,12 @@ rag-exploration/
   ingest/                  # Python: parse, chunk, embed, build DB
     requirements.txt
     chunk.py               # episode.md -> structured chunks
-    embed.py               # chunks -> vectors via Ollama /api/embed
+    embed.py               # chunks -> vectors via LM Studio /v1/embeddings
     build_db.py            # chunks + vectors -> SQLite + sqlite-vec
     eval.py                # compare retrieval across embedding models
   web/                     # static frontend — vanilla JS + water.css
     index.html             # chat UI
-    app.js                 # chat orchestration, Ollama streaming
+    app.js                 # chat orchestration, LM Studio streaming
     search.js              # sql.js + sqlite-vec WASM vector search
 ```
 
@@ -146,9 +146,9 @@ rag-exploration/
 # Install Python dependencies
 pip install -r ingest/requirements.txt
 
-# Run ingest pipeline (requires Ollama running locally)
+# Run ingest pipeline (requires LM Studio server running locally on :1234)
 python ingest/chunk.py                           # parse all episodes -> chunks JSON
-python ingest/embed.py --model bge-m3            # embed chunks via Ollama
+python ingest/embed.py --model bge-m3            # embed chunks via LM Studio
 python ingest/build_db.py --model bge-m3         # build SQLite DB
 python ingest/eval.py                            # compare models
 
@@ -164,7 +164,7 @@ caddy start                                      # daemonized, serves on :8080
 - **No build step for frontend.** Vanilla JS, no bundler, no node_modules. `<script>` tags only.
 - **water.css** for styling — classless CSS, just write semantic HTML.
 - **`marked`** (~7KB) for rendering markdown in chat responses.
-- **Relative API URLs** (`/api/chat`, `/api/embed`) — works from any LAN device, no CORS issues, no hardcoded hosts.
-- **Streaming responses** via `fetch()` + `ReadableStream` for Ollama's chunked output.
+- **Relative API URLs** (`/v1/chat/completions`, `/v1/embeddings`) — works from any LAN device, no CORS issues, no hardcoded hosts.
+- **Streaming responses** via `fetch()` + `ReadableStream`, parsing LM Studio's OpenAI-compatible SSE (`data: {...}\n\n` lines with `choices[0].delta.content`).
 - **`episode.md` is the single source of truth** for the ingest pipeline. Other files are supplementary.
 - **The `data/` directory is not in git.** It's ~1GB and contains only source data. Manually copy to the Mac Studio.

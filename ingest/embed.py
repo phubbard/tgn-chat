@@ -1,6 +1,6 @@
-"""Embed chunks via Ollama's /api/embed endpoint.
+"""Embed chunks via LM Studio's OpenAI-compatible /v1/embeddings endpoint.
 
-Reads chunks from JSONL, calls Ollama for embeddings, writes augmented JSONL
+Reads chunks from JSONL, calls LM Studio for embeddings, writes augmented JSONL
 with embedding vectors attached.
 
 Usage:
@@ -15,24 +15,24 @@ import time
 
 import requests
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://127.0.0.1:1234")
 
 
 def get_embedding(text, model):
-    """Get embedding vector from Ollama."""
+    """Get embedding vector from LM Studio."""
     resp = requests.post(
-        f"{OLLAMA_URL}/api/embed",
+        f"{LM_STUDIO_URL}/v1/embeddings",
         json={"model": model, "input": text},
         timeout=120,
     )
     resp.raise_for_status()
     data = resp.json()
-    return data["embeddings"][0]
+    return data["data"][0]["embedding"]
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Embed chunks via Ollama")
-    parser.add_argument("--model", required=True, help="Ollama embedding model name")
+    parser = argparse.ArgumentParser(description="Embed chunks via LM Studio")
+    parser.add_argument("--model", required=True, help="LM Studio embedding model identifier")
     parser.add_argument("--input", default="build/chunks.jsonl", help="Input JSONL")
     parser.add_argument("--output", default=None, help="Output JSONL (default: build/chunks.{model}.jsonl)")
     parser.add_argument("--batch-size", type=int, default=1, help="Chunks per API call")

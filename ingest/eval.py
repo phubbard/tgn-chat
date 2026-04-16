@@ -18,7 +18,7 @@ import sys
 import requests
 import sqlite_vec
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://127.0.0.1:1234")
 
 # Test queries with expected episode numbers (ground truth).
 # Add more as you discover good test cases.
@@ -48,12 +48,12 @@ TEST_QUERIES = [
 
 def get_embedding(text, model):
     resp = requests.post(
-        f"{OLLAMA_URL}/api/embed",
+        f"{LM_STUDIO_URL}/v1/embeddings",
         json={"model": model, "input": text},
         timeout=120,
     )
     resp.raise_for_status()
-    return resp.json()["embeddings"][0]
+    return resp.json()["data"][0]["embedding"]
 
 
 def serialize_float32(vec):

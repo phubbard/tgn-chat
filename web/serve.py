@@ -20,7 +20,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 import sqlite_vec
 
-OLLAMA_URL = "http://127.0.0.1:11434"
+LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://127.0.0.1:1234")
 TOP_K = 16
 
 STOPWORDS = {
@@ -65,12 +65,12 @@ def init_db(db_path):
 
 def get_embedding(text):
     resp = requests.post(
-        f"{OLLAMA_URL}/api/embed",
+        f"{LM_STUDIO_URL}/v1/embeddings",
         json={"model": embedding_model, "input": text},
         timeout=30,
     )
     resp.raise_for_status()
-    return resp.json()["embeddings"][0]
+    return resp.json()["data"][0]["embedding"]
 
 
 def serialize_float32(vec):

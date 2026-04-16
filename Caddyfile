@@ -1,8 +1,8 @@
 :8080 {
-	handle /api/* {
-		reverse_proxy 127.0.0.1:11434 {
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:1234 {
 			header_up -Origin
-			header_up Host localhost:11434
+			header_up Host localhost:1234
 		}
 	}
 	handle /search {

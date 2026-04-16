@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TGN Chatbot</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%8C%9A%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
@@ -43,6 +44,22 @@
     }
     .sources summary {
       cursor: pointer;
+    }
+    .reasoning {
+      font-size: 0.85em;
+      opacity: 0.75;
+      margin-bottom: 0.5em;
+      border-left: 2px dotted var(--border);
+      padding-left: 0.6em;
+    }
+    .reasoning summary {
+      cursor: pointer;
+      font-style: italic;
+    }
+    .reasoning-body {
+      white-space: pre-wrap;
+      margin-top: 0.4em;
+      opacity: 0.8;
     }
     #status {
       font-size: 0.85em;
@@ -108,7 +125,7 @@
       using <strong>RAG</strong> (Retrieval-Augmented Generation). Your question is
       matched against episode transcripts, synopses, and 7,663 curated shownotes links
       using both vector similarity search and full-text keyword search. The best matching
-      excerpts are fed to a local LLM (running on <a href="https://ollama.com" target="_blank">Ollama</a>)
+      excerpts are fed to a local LLM (running in <a href="https://lmstudio.ai" target="_blank">LM Studio</a>)
       which generates a grounded answer with episode citations. All data comes from
       transcripts produced by <a href="https://github.com/phubbard/tgn-whisperer" target="_blank">tgn-whisperer</a>.
     </p>

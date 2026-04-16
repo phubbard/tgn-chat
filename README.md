@@ -18,9 +18,10 @@ Live at [tgnchat.phfactor.net](https://tgnchat.phfactor.net/).
     |                            - FTS5 (keyword)         |
     |                            - session logging        |
     |                                                     |
-    |   /api/* ----------------> Ollama :11434            |
-    |                            - /api/embed (bge-m3)    |
-    |                            - /api/chat  (streaming) |
+    |   /v1/* -----------------> LM Studio :1234          |
+    |                            - /v1/embeddings (bge-m3)|
+    |                            - /v1/chat/completions   |
+    |                              (streaming)            |
     |                                                     |
     |   /* --------------------> web/ (static files)      |
     +----------------------------------------------------+
@@ -36,11 +37,11 @@ Live at [tgnchat.phfactor.net](https://tgnchat.phfactor.net/).
 ## How it works
 
 1. User asks a question in the browser
-2. `serve.py` embeds the query via Ollama (`bge-m3`) and runs hybrid search:
+2. `serve.py` embeds the query via LM Studio (`bge-m3`) and runs hybrid search:
    - **Vector**: sqlite-vec KNN over 1024-dim embeddings
    - **Keyword**: FTS5 full-text search with BM25 ranking
    - Results are merged and re-ranked
-3. Browser sends retrieved chunks + question to Ollama for generation
+3. Browser sends retrieved chunks + question to LM Studio for generation
 4. Response streams back token-by-token with inline episode citations
 
 ## Ingest pipeline
@@ -81,14 +82,14 @@ caddy run                    # reverse proxy on :8080
 ```
 ingest/
   chunk.py          parse episodes into structured chunks
-  embed.py          embed chunks via Ollama
+  embed.py          embed chunks via LM Studio
   build_db.py       build SQLite DB with vectors + FTS5
   rebuild.py        incremental rebuild (only re-embeds changed episodes)
   eval.py           compare retrieval across embedding models
   sync.sh           rsync episode data from the transcription server
 web/
   index.html        chat UI (water.css, no build step)
-  app.js            chat orchestration, Ollama streaming
+  app.js            chat orchestration, LM Studio streaming
   search.js         thin client for server-side search
   serve.py          search API server (hybrid search + logging)
 Caddyfile           reverse proxy config
@@ -97,6 +98,6 @@ Caddyfile           reverse proxy config
 ## Requirements
 
 - Python 3.10+ with `requests`, `sqlite-vec`
-- [Ollama](https://ollama.com) with `bge-m3` (embedding) and a chat model
+- [LM Studio](https://lmstudio.ai) with `bge-m3` (embedding) and a chat model loaded, server running on `127.0.0.1:1234`
 - [Caddy](https://caddyserver.com) (optional, for LAN access)
 - Source data in `data/inputs/` (not included, ~1GB)

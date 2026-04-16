@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Extract topics from episode synopses using a local LLM via Ollama.
+"""Extract topics from episode synopses using a local LLM via LM Studio.
 
-Reads synopses from the database, sends each to Ollama for topic extraction,
+Reads synopses from the database, sends each to LM Studio for topic extraction,
 and updates the episodes table with a JSON array of topics.
 
 Usage:
-    python ingest/extract_topics.py [--db build/podcast.db] [--model gemma3:12b]
+    python ingest/extract_topics.py [--db build/podcast.db] [--model gemma-3-12b-it]
 """
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -18,7 +19,7 @@ import time
 import requests
 import sqlite_vec
 
-OLLAMA_URL = "http://127.0.0.1:11434"
+LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://127.0.0.1:1234")
 
 PROMPT = """Extract 3-8 topic tags from this podcast episode synopsis. Return ONLY a JSON array of short tags (1-3 words each). Tags should be specific and useful for search — prefer concrete topics like "Omega Speedmaster", "Baselworld 2016", "dive watches" over vague ones like "discussion", "opinions", "watches" (too generic for a watch podcast).
 
@@ -32,19 +33,20 @@ JSON array:"""
 
 
 def extract_topics(synopsis, model):
-    """Send synopsis to Ollama and parse topic tags."""
+    """Send synopsis to LM Studio and parse topic tags."""
     resp = requests.post(
-        f"{OLLAMA_URL}/api/generate",
+        f"{LM_STUDIO_URL}/v1/chat/completions",
         json={
             "model": model,
-            "prompt": PROMPT.format(synopsis=synopsis),
+            "messages": [{"role": "user", "content": PROMPT.format(synopsis=synopsis)}],
+            "temperature": 0.3,
+            "max_tokens": 200,
             "stream": False,
-            "options": {"temperature": 0.3, "num_predict": 200},
         },
         timeout=120,
     )
     resp.raise_for_status()
-    text = resp.json()["response"].strip()
+    text = resp.json()["choices"][0]["message"]["content"].strip()
 
     # Extract JSON array from response (LLM may include extra text)
     match = re.search(r"\[.*?\]", text, re.DOTALL)
@@ -65,7 +67,7 @@ def extract_topics(synopsis, model):
 def main():
     parser = argparse.ArgumentParser(description="Extract topics from episode synopses")
     parser.add_argument("--db", default="build/podcast.db", help="Database path")
-    parser.add_argument("--model", default="gemma3:12b", help="Ollama model for extraction")
+    parser.add_argument("--model", default="gemma-3-12b-it", help="LM Studio model identifier for extraction")
     parser.add_argument("--force", action="store_true", help="Re-extract even if topics exist")
     args = parser.parse_args()
 
