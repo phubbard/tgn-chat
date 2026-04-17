@@ -25,124 +25,249 @@
       scroll-behavior: smooth;
       min-height: 0;
     }
+    .chat-banner {
+      font-size: 0.8em;
+      opacity: 0.6;
+      text-align: center;
+      margin: 0.5em 0 1em 0;
+      padding-bottom: 0.5em;
+      border-bottom: 1px dashed var(--border);
+    }
     .message {
       margin-bottom: 1em;
       padding: 0.5em;
       border-radius: 4px;
     }
-    .message.user {
-      background: var(--background-alt);
-    }
+    .message.user { background: var(--background-alt); }
     .message.assistant {
       border-left: 3px solid var(--links);
       padding-left: 1em;
     }
-    .sources {
-      font-size: 0.85em;
-      opacity: 0.8;
-      margin-top: 0.5em;
-    }
-    .sources summary {
-      cursor: pointer;
-    }
+    .sources { font-size: 0.85em; opacity: 0.8; margin-top: 0.5em; }
+    .sources summary { cursor: pointer; }
     .reasoning {
-      font-size: 0.85em;
-      opacity: 0.75;
-      margin-bottom: 0.5em;
-      border-left: 2px dotted var(--border);
-      padding-left: 0.6em;
+      font-size: 0.85em; opacity: 0.75; margin-bottom: 0.5em;
+      border-left: 2px dotted var(--border); padding-left: 0.6em;
     }
-    .reasoning summary {
-      cursor: pointer;
-      font-style: italic;
+    .reasoning summary { cursor: pointer; font-style: italic; }
+    .reasoning-body { white-space: pre-wrap; margin-top: 0.4em; opacity: 0.8; }
+    .processing {
+      font-size: 0.9em; opacity: 0.75; font-style: italic; margin: 0.3em 0;
     }
-    .reasoning-body {
-      white-space: pre-wrap;
-      margin-top: 0.4em;
-      opacity: 0.8;
+    .skeleton-header {
+      font-size: 0.9em; opacity: 0.85; margin: 0 0 0.6em 0;
+      font-variant-numeric: tabular-nums;
     }
-    #status {
-      font-size: 0.85em;
-      opacity: 0.7;
+    .skeleton-bars { display: flex; flex-direction: column; gap: 0.5em; }
+    .skeleton-bar {
+      height: 0.9em; border-radius: 3px;
+      background: linear-gradient(
+        90deg,
+        var(--background-alt) 0%, var(--border) 50%, var(--background-alt) 100%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.4s linear infinite;
     }
-    form {
-      display: flex;
-      gap: 0.5em;
+    @keyframes shimmer {
+      0%   { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
     }
-    form input[type="text"] {
-      flex: 1;
-    }
-    .gen-stats {
-      font-size: 0.8em;
-      opacity: 0.5;
-      margin-top: 0.5em;
-    }
-    .feedback {
-      display: inline-flex;
-      gap: 0.3em;
-      margin-left: 1em;
-    }
+    #status { font-size: 0.85em; opacity: 0.7; margin: 0.3em 0; }
+    form { display: flex; gap: 0.5em; }
+    form input[type="text"] { flex: 1; }
+    .gen-stats { font-size: 0.8em; opacity: 0.5; margin-top: 0.5em; }
+    .feedback { display: inline-flex; gap: 0.3em; margin-left: 1em; }
     .feedback button {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      cursor: pointer;
-      padding: 0.1em 0.4em;
-      font-size: 0.85em;
-      opacity: 0.6;
-      margin: 0;
+      background: none; border: 1px solid var(--border);
+      border-radius: 4px; cursor: pointer;
+      padding: 0.1em 0.4em; font-size: 0.85em;
+      opacity: 0.6; margin: 0;
     }
-    .feedback button:hover {
-      opacity: 1;
-    }
-    .feedback button.selected {
-      opacity: 1;
-      border-color: var(--links);
-    }
-    #model-bar {
+    .feedback button:hover { opacity: 1; }
+    .feedback button.selected { opacity: 1; border-color: var(--links); }
+
+    /* ---------- Top navbar (Bootstrap-style, sticky) ---------- */
+    #topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--background-body);
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 0.5em;
-      font-size: 0.85em;
-      margin-bottom: 0.5em;
+      gap: 1em;
+      padding: 0.45em 0;
+      margin-bottom: 0.6em;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-weight: 600;
+      font-size: 1rem;
+      text-decoration: none;
+      color: inherit;
+      letter-spacing: 0.01em;
+    }
+    .brand:hover { color: var(--links); }
+    #menu-toggle {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: inherit;
+      font-size: 1.2rem;
+      line-height: 1;
+      padding: 0.15em 0.5em;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: auto;
+    }
+    #menu-toggle:hover { border-color: var(--links); }
+    #sitenav {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+      margin-left: auto;
+      font-size: 0.9rem;
+      flex-wrap: wrap;
+    }
+    #sitenav > a,
+    #sitenav .dropdown-toggle {
+      white-space: nowrap;
+      text-decoration: none;
+      color: inherit;
+      padding: 0.2em 0.1em;
+    }
+    #sitenav > a:hover,
+    #sitenav .dropdown-toggle:hover { color: var(--links); }
+    .dropdown { position: relative; }
+    .dropdown-toggle {
+      background: transparent;
+      border: none;
+      font: inherit;
+      cursor: pointer;
+      margin: 0;
+    }
+    .dropdown-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 0.3em);
+      right: 0;
+      min-width: 22em;
+      max-width: 36em;
+      background: var(--background-body);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.8em 1em;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+      font-size: 0.9rem;
+      z-index: 101;
+      line-height: 1.4;
+    }
+    .dropdown.open > .dropdown-panel { display: block; }
+    .dropdown-panel p { margin: 0.4em 0; }
+    .dropdown-panel p:first-child { margin-top: 0; }
+    .dropdown-panel ul { margin: 0.3em 0; padding-left: 0; list-style: none; }
+    .dropdown-panel ul li { padding: 0.25em 0; }
+    .dropdown-panel ul a { text-decoration: none; }
+    .dropdown-panel ul a:hover { text-decoration: underline; }
+    #index-info {
+      font-size: 0.8rem;
+      opacity: 0.75;
+      margin: 0 0 0.5em 0;
+      padding-bottom: 0.5em;
+      border-bottom: 1px solid var(--border);
     }
     #model-select {
+      font-size: 0.85rem;
+      padding: 0.1em 0.3em;
+      max-width: 16em;
       margin: 0;
     }
     #model-link {
-      font-size: 0.85em;
-      opacity: 0.6;
+      font-size: 0.8rem;
+      opacity: 0.7;
+      text-decoration: none;
+    }
+    #model-link:hover { opacity: 1; text-decoration: underline; }
+
+    @media (max-width: 720px) {
+      .brand { font-size: 0.95rem; }
+      #menu-toggle { display: inline-flex; align-items: center; }
+      #sitenav {
+        display: none;
+        flex-basis: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.4em;
+        padding: 0.5em 0;
+        border-top: 1px solid var(--border);
+        margin-left: 0;
+      }
+      #sitenav.open { display: flex; }
+      #sitenav > a,
+      #sitenav .dropdown-toggle {
+        padding: 0.55em 0.3em;
+        border-bottom: 1px solid var(--background-alt);
+        text-align: left;
+        width: 100%;
+      }
+      .dropdown { width: 100%; }
+      .dropdown-panel {
+        position: static;
+        box-shadow: none;
+        border: none;
+        padding: 0.3em 0 0.3em 1em;
+        min-width: 0;
+        max-width: none;
+        font-size: 0.9rem;
+      }
+      #model-select { max-width: 100%; width: 100%; }
     }
   </style>
 </head>
 <body>
-  <h1>The Grey NATO — Chatbot</h1>
-  <details id="about">
-    <summary>About this chatbot</summary>
-    <p>
-      This chatbot searches across all 363 episodes of
-      <a href="https://thegreynato.com" target="_blank">The Grey NATO</a> podcast
-      using <strong>RAG</strong> (Retrieval-Augmented Generation). Your question is
-      matched against episode transcripts, synopses, and 7,663 curated shownotes links
-      using both vector similarity search and full-text keyword search. The best matching
-      excerpts are fed to a local LLM (running in <a href="https://lmstudio.ai" target="_blank">LM Studio</a>)
-      which generates a grounded answer with episode citations. All data comes from
-      transcripts produced by <a href="https://github.com/phubbard/tgn-whisperer" target="_blank">tgn-whisperer</a>.
-    </p>
-    <p>Try these sample queries:</p>
-    <ul>
-      <li><a href="#" class="sample-query">What do Jason and James think of Girard-Perregaux?</a></li>
-      <li><a href="#" class="sample-query">Which episodes feature guest appearances?</a></li>
-      <li><a href="#" class="sample-query">What are the best field watches discussed on the show?</a></li>
-      <li><a href="#" class="sample-query">Tell me about the trips to Japan</a></li>
-    </ul>
-  </details>
-  <p id="status">Loading database...</p>
-  <div id="model-bar">
-    <label for="model-select">Model:</label>
-    <select id="model-select" disabled></select>
-    <a id="model-link" target="_blank">(info)</a>
-  </div>
+  <header id="topbar">
+    <a class="brand" href="/">TGN Chatbot</a>
+    <button id="menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sitenav">☰</button>
+    <nav id="sitenav" aria-label="Primary">
+      <a href="/">New chat</a>
+      <a href="/history">History</a>
+
+      <div class="dropdown" data-dropdown>
+        <button type="button" class="dropdown-toggle" aria-expanded="false">About ▾</button>
+        <div class="dropdown-panel" role="region" aria-label="About">
+          <p id="index-info"></p>
+          <p>
+            Searches across all indexed episodes of
+            <a href="https://thegreynato.com" target="_blank" rel="noopener">The Grey NATO</a>
+            using <strong>RAG</strong>. Your question is matched against transcripts, synopses,
+            and 7,663 curated shownotes links via vector + keyword search. Retrieved excerpts
+            are fed to a local LLM running in
+            <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a>,
+            which generates a grounded answer with episode citations. Transcripts produced by
+            <a href="https://github.com/phubbard/tgn-whisperer" target="_blank" rel="noopener">tgn-whisperer</a>.
+          </p>
+          <p><a id="model-link" target="_blank" rel="noopener">Current model on Hugging Face →</a></p>
+          <p><a href="https://github.com/phubbard/tgn-chat" target="_blank" rel="noopener">Free and open source</a></p>
+        </div>
+      </div>
+
+      <div class="dropdown" data-dropdown>
+        <button type="button" class="dropdown-toggle" aria-expanded="false">Samples ▾</button>
+        <div class="dropdown-panel" role="region" aria-label="Sample queries">
+          <ul>
+            <li><a href="#" class="sample-query">What do Jason and James think of Girard-Perregaux?</a></li>
+            <li><a href="#" class="sample-query">Which episodes feature guest appearances?</a></li>
+            <li><a href="#" class="sample-query">What are the best field watches discussed on the show?</a></li>
+            <li><a href="#" class="sample-query">Tell me about the trips to Japan</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <select id="model-select" disabled aria-label="Chat model"></select>
+    </nav>
+  </header>
+
+  <p id="status"></p>
 
   <div id="chat"></div>
 
@@ -151,7 +276,7 @@
     <button type="submit" id="submit-btn" disabled>Ask</button>
   </form>
 
-  <script src="search.js"></script>
-  <script src="app.js"></script>
+  <script src="/search.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

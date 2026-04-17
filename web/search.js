@@ -12,9 +12,15 @@ const TOP_K = 16;
  * Initialize by fetching DB info from the server.
  */
 async function initDB() {
-  const resp = await fetch(`${SEARCH_URL}/info`);
-  if (!resp.ok) throw new Error(`Search API not available: ${resp.status}`);
-  return await resp.json();
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const resp = await fetch(`${SEARCH_URL}/info`, { signal: ctrl.signal });
+    if (!resp.ok) throw new Error(`Search API not available: ${resp.status}`);
+    return await resp.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**

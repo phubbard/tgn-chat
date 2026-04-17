@@ -1,5 +1,15 @@
 :8080 {
+	# Force re-validation for the SPA assets so iteration doesn't need hard-reload.
+	@noCache path *.html *.js *.css / /history /c/*
+	header @noCache Cache-Control "no-cache"
+
 	handle /v1/* {
+		reverse_proxy 127.0.0.1:1234 {
+			header_up -Origin
+			header_up Host localhost:1234
+		}
+	}
+	handle /api/v0/* {
 		reverse_proxy 127.0.0.1:1234 {
 			header_up -Origin
 			header_up Host localhost:1234
@@ -19,6 +29,23 @@
 	}
 	handle /monitor/* {
 		reverse_proxy 127.0.0.1:5555
+	}
+	handle /chats {
+		reverse_proxy 127.0.0.1:5555
+	}
+	handle /chats/* {
+		reverse_proxy 127.0.0.1:5555
+	}
+	# Shareable chat URL: /c/{uuid} — serve the SPA and let app.js read the path
+	handle /c/* {
+		rewrite * /index.html
+		root * web
+		file_server
+	}
+	handle /history {
+		rewrite * /history.html
+		root * web
+		file_server
 	}
 	handle {
 		root * web

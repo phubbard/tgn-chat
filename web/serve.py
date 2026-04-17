@@ -43,13 +43,33 @@ STOPWORDS = {
 }
 
 db = None
+db_path = None
 embedding_model = None
 embedding_dim = None
+APP_VERSION = None
 
 
-def init_db(db_path):
-    global db, embedding_model, embedding_dim
-    db = sqlite3.connect(db_path, check_same_thread=False)
+def compute_app_version():
+    """Short git SHA + commit date, or 'unknown' if not a git checkout."""
+    import subprocess
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short=8", "HEAD"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        date = subprocess.check_output(
+            ["git", "log", "-1", "--format=%cs", "HEAD"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        return f"{sha} ({date})"
+    except Exception:
+        return "unknown"
+
+
+def init_db(path):
+    global db, db_path, embedding_model, embedding_dim
+    db_path = path
+    db = sqlite3.connect(path, check_same_thread=False)
     db.enable_load_extension(True)
     sqlite_vec.load(db)
 
@@ -168,11 +188,19 @@ def hybrid_search(query_text, top_k=TOP_K):
 
 def get_db_info():
     meta = dict(db.execute("SELECT key, value FROM meta").fetchall())
+    latest_ep = db.execute("SELECT MAX(number) FROM episodes").fetchone()[0]
+    built_at = meta.get("built_at")
+    if not built_at:
+        # Fallback for DBs built before built_at was tracked
+        built_at = datetime.fromtimestamp(os.path.getmtime(db_path)).isoformat(timespec="seconds")
     return {
         "model": meta["embedding_model"],
         "dim": int(meta["embedding_dim"]),
         "episodes": db.execute("SELECT COUNT(*) FROM episodes").fetchone()[0],
         "chunks": db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
+        "latest_episode": int(latest_ep) if latest_ep is not None else None,
+        "built_at": built_at,
+        "app_version": APP_VERSION,
     }
 
 
@@ -187,6 +215,158 @@ _recent_events = collections.deque(maxlen=200)
 
 
 EVENTS_JSONL = os.path.join(LOG_DIR, "events.jsonl")
+CHATS_DB_PATH = os.path.join(LOG_DIR, "chats.db")
+chats_db = None
+
+
+def init_chats_db():
+    """Create the chats + messages tables used for shareable chat URLs."""
+    global chats_db
+    os.makedirs(LOG_DIR, exist_ok=True)
+    chats_db = sqlite3.connect(CHATS_DB_PATH, check_same_thread=False)
+    chats_db.executescript("""
+        CREATE TABLE IF NOT EXISTS chats (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            title TEXT,
+            session_id TEXT,
+            user_agent TEXT,
+            message_count INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_chats_updated ON chats(updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            model TEXT,
+            query_id TEXT,
+            source_episodes TEXT,
+            tokens INTEGER,
+            ttft_s REAL,
+            total_time_s REAL,
+            tok_per_sec REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id, id);
+    """)
+    chats_db.commit()
+
+
+def mirror_query_to_chats_db(chat_id, session_id, user_agent, event):
+    """Mirror a query event into the chats DB as user + assistant messages."""
+    if not chat_id:
+        return
+    now = event.get("timestamp") or datetime.now().isoformat()
+    query = event.get("query", "")
+    response = event.get("response", "")
+    title = (query[:80] + ("…" if len(query) > 80 else "")) if query else None
+
+    # Upsert chat row
+    row = chats_db.execute("SELECT id, title FROM chats WHERE id = ?", (chat_id,)).fetchone()
+    if row is None:
+        chats_db.execute(
+            "INSERT INTO chats (id, created_at, updated_at, title, session_id, user_agent, message_count) "
+            "VALUES (?, ?, ?, ?, ?, ?, 0)",
+            (chat_id, now, now, title, session_id, user_agent),
+        )
+    else:
+        # Keep first-query title; just bump updated_at
+        chats_db.execute("UPDATE chats SET updated_at = ? WHERE id = ?", (now, chat_id))
+
+    # Insert user + assistant messages
+    chats_db.execute(
+        "INSERT INTO messages (chat_id, created_at, role, content, model, query_id) "
+        "VALUES (?, ?, 'user', ?, ?, ?)",
+        (chat_id, now, query, event.get("model"), event.get("query_id")),
+    )
+    chats_db.execute(
+        "INSERT INTO messages (chat_id, created_at, role, content, model, query_id, "
+        "source_episodes, tokens, ttft_s, total_time_s, tok_per_sec) "
+        "VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            chat_id, now, response, event.get("model"), event.get("query_id"),
+            json.dumps(event.get("source_episodes") or []),
+            event.get("tokens"), event.get("ttft_s"),
+            event.get("total_time_s"), event.get("tok_per_sec"),
+        ),
+    )
+    chats_db.execute(
+        "UPDATE chats SET message_count = message_count + 2 WHERE id = ?", (chat_id,)
+    )
+    chats_db.commit()
+
+
+def list_chats(limit, before):
+    """Return chats ordered newest-first, cursor-paginated by updated_at."""
+    if before:
+        rows = chats_db.execute(
+            "SELECT id, created_at, updated_at, title, message_count "
+            "FROM chats WHERE updated_at < ? "
+            "ORDER BY updated_at DESC LIMIT ?",
+            (before, limit),
+        ).fetchall()
+    else:
+        rows = chats_db.execute(
+            "SELECT id, created_at, updated_at, title, message_count "
+            "FROM chats ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [
+        {"id": r[0], "created_at": r[1], "updated_at": r[2],
+         "title": r[3], "message_count": r[4]}
+        for r in rows
+    ]
+
+
+def get_chat(chat_id):
+    """Return a single chat + ordered messages, or None."""
+    meta = chats_db.execute(
+        "SELECT id, created_at, updated_at, title, message_count FROM chats WHERE id = ?",
+        (chat_id,),
+    ).fetchone()
+    if not meta:
+        return None
+    messages = chats_db.execute(
+        "SELECT id, created_at, role, content, model, query_id, source_episodes, "
+        "tokens, ttft_s, total_time_s, tok_per_sec FROM messages "
+        "WHERE chat_id = ? ORDER BY id",
+        (chat_id,),
+    ).fetchall()
+
+    # Collect all episode numbers referenced across messages, resolve once.
+    all_eps = set()
+    parsed_sources = []
+    for m in messages:
+        eps_json = m[6]
+        eps = json.loads(eps_json) if eps_json else []
+        parsed_sources.append(eps)
+        all_eps.update(eps)
+    ep_info = {}
+    if all_eps:
+        placeholders = ",".join("?" for _ in all_eps)
+        rows = db.execute(
+            f"SELECT number, title, episode_url FROM episodes WHERE number IN ({placeholders})",
+            tuple(all_eps),
+        ).fetchall()
+        ep_info = {r[0]: {"number": r[0], "title": r[1], "url": r[2]} for r in rows}
+
+    return {
+        "id": meta[0], "created_at": meta[1], "updated_at": meta[2],
+        "title": meta[3], "message_count": meta[4],
+        "messages": [
+            {
+                "created_at": m[1], "role": m[2], "content": m[3],
+                "model": m[4], "query_id": m[5],
+                "sources": [ep_info[n] for n in parsed_sources[i] if n in ep_info],
+                "tokens": m[7], "ttft_s": m[8],
+                "total_time_s": m[9], "tok_per_sec": m[10],
+            }
+            for i, m in enumerate(messages)
+        ],
+    }
 
 
 def _load_events_from_disk():
@@ -221,6 +401,18 @@ def write_log(session_id, event):
     os.makedirs(LOG_DIR, exist_ok=True)
     with open(EVENTS_JSONL, "a", encoding="utf-8") as f:
         f.write(json.dumps(enriched, ensure_ascii=False) + "\n")
+
+    # Mirror query events into the chats DB so URLs can reload the thread
+    if event.get("type") == "query":
+        try:
+            mirror_query_to_chats_db(
+                event.get("chat_id"),
+                session_id,
+                event.get("user_agent"),
+                enriched,
+            )
+        except Exception as e:
+            print(f"chats.db mirror error: {e}", file=sys.stderr)
     # Use first 8 chars of UUID for filename readability
     short_id = session_id[:8]
     now = datetime.now()
@@ -328,10 +520,11 @@ class SearchHandler(BaseHTTPRequestHandler):
             self._json_response(404, {"error": "not found"})
 
     def do_GET(self):
+        from urllib.parse import urlparse, parse_qs
+
         if self.path == "/search/info":
             self._json_response(200, get_db_info())
         elif self.path.startswith("/monitor/events"):
-            from urllib.parse import urlparse, parse_qs
             qs = parse_qs(urlparse(self.path).query)
             since = qs.get("since", [None])[0]
             history = qs.get("history", ["0"])[0] == "1"
@@ -349,6 +542,25 @@ class SearchHandler(BaseHTTPRequestHandler):
             self._json_response(200, {"events": events})
         elif self.path == "/monitor":
             self._serve_file("web/monitor.html", "text/html")
+        elif self.path.startswith("/chats"):
+            parsed = urlparse(self.path)
+            # /chats/{id} — single thread
+            parts = [p for p in parsed.path.split("/") if p]
+            if len(parts) == 2:
+                chat = get_chat(parts[1])
+                if chat is None:
+                    self._json_response(404, {"error": "not found"})
+                else:
+                    self._json_response(200, chat)
+                return
+            # /chats — paginated list
+            qs = parse_qs(parsed.query)
+            try:
+                limit = min(int(qs.get("limit", ["20"])[0]), 100)
+            except ValueError:
+                limit = 20
+            before = qs.get("before", [None])[0]
+            self._json_response(200, {"chats": list_chats(limit, before)})
         else:
             self._json_response(404, {"error": "not found"})
 
@@ -383,7 +595,11 @@ def main():
     parser.add_argument("--port", type=int, default=5555, help="Listen port")
     args = parser.parse_args()
 
+    global APP_VERSION
+    APP_VERSION = compute_app_version()
+    print(f"App version: {APP_VERSION}", file=sys.stderr)
     init_db(args.db)
+    init_chats_db()
     server = HTTPServer(("0.0.0.0", args.port), SearchHandler)
     print(f"Search API listening on http://127.0.0.1:{args.port}", file=sys.stderr)
     server.serve_forever()

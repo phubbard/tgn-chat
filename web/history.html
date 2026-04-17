@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TGN Chatbot — History</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%8C%9A%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+  <style>
+    body { max-width: 900px; }
+    #topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--background-body);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1em;
+      padding: 0.45em 0;
+      margin-bottom: 0.6em;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-weight: 600;
+      font-size: 1rem;
+      text-decoration: none;
+      color: inherit;
+    }
+    .brand:hover { color: var(--links); }
+    #menu-toggle {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: inherit;
+      font-size: 1.2rem;
+      line-height: 1;
+      padding: 0.15em 0.5em;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: auto;
+    }
+    #menu-toggle:hover { border-color: var(--links); }
+    #sitenav {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+      margin-left: auto;
+      font-size: 0.9rem;
+    }
+    #sitenav a {
+      white-space: nowrap;
+      text-decoration: none;
+      color: inherit;
+    }
+    #sitenav a:hover { color: var(--links); }
+    h1.page-title {
+      margin: 0.2em 0 0.4em 0;
+      font-size: 1.3rem;
+    }
+    @media (max-width: 720px) {
+      .brand { font-size: 0.95rem; }
+      #menu-toggle { display: inline-flex; align-items: center; }
+      #sitenav {
+        display: none;
+        flex-basis: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.4em;
+        padding: 0.5em 0;
+        border-top: 1px solid var(--border);
+        margin-left: 0;
+      }
+      #sitenav.open { display: flex; }
+      #sitenav a {
+        padding: 0.55em 0.3em;
+        border-bottom: 1px solid var(--background-alt);
+      }
+      #sitenav a:last-child { border-bottom: none; }
+    }
+    .chat-row {
+      display: block;
+      border-left: 3px solid var(--border);
+      padding: 0.6em 0.9em;
+      margin-bottom: 0.6em;
+      text-decoration: none;
+      color: inherit;
+      border-radius: 2px;
+    }
+    .chat-row:hover {
+      border-left-color: var(--links);
+      background: var(--background-alt);
+    }
+    .chat-title {
+      font-weight: 600;
+      margin: 0 0 0.2em 0;
+    }
+    .chat-meta {
+      font-size: 0.8em;
+      opacity: 0.7;
+    }
+    #sentinel {
+      text-align: center;
+      padding: 2em 0;
+      opacity: 0.6;
+      font-size: 0.85em;
+    }
+    #empty {
+      opacity: 0.7;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <header id="topbar">
+    <a class="brand" href="/">TGN Chatbot</a>
+    <button id="menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sitenav">☰</button>
+    <nav id="sitenav" aria-label="Primary">
+      <a href="/">New chat</a>
+      <a href="/history">History</a>
+    </nav>
+  </header>
+  <h1 class="page-title">Chat history</h1>
+  <p>Recent conversations across all visitors. Click any row to reopen.</p>
+  <div id="list"></div>
+  <div id="sentinel">Loading...</div>
+
+  <script>
+    const PAGE_SIZE = 20;
+    const list = document.getElementById('list');
+    const sentinel = document.getElementById('sentinel');
+    let cursor = null;
+    let done = false;
+    let loading = false;
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const opts = sameDay
+        ? { hour: 'numeric', minute: '2-digit' }
+        : { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+      return d.toLocaleString(undefined, opts);
+    }
+
+    function render(chats) {
+      for (const c of chats) {
+        const a = document.createElement('a');
+        a.className = 'chat-row';
+        a.href = `/c/${c.id}`;
+        const title = c.title || '(untitled)';
+        const msgs = c.message_count || 0;
+        a.innerHTML = `
+          <div class="chat-title"></div>
+          <div class="chat-meta"></div>
+        `;
+        a.querySelector('.chat-title').textContent = title;
+        a.querySelector('.chat-meta').textContent =
+          `${formatDate(c.updated_at)} · ${msgs} message${msgs === 1 ? '' : 's'}`;
+        list.appendChild(a);
+      }
+    }
+
+    async function loadMore() {
+      if (done || loading) return;
+      loading = true;
+      sentinel.textContent = 'Loading...';
+      try {
+        const url = new URL('/chats', location.origin);
+        url.searchParams.set('limit', String(PAGE_SIZE));
+        if (cursor) url.searchParams.set('before', cursor);
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const chats = data.chats || [];
+        render(chats);
+        if (chats.length < PAGE_SIZE) {
+          done = true;
+          sentinel.textContent = list.children.length ? 'That\u2019s everything.' : '';
+          if (!list.children.length) {
+            const p = document.createElement('p');
+            p.id = 'empty';
+            p.textContent = 'No chats yet. Go ask something.';
+            list.appendChild(p);
+          }
+        } else {
+          cursor = chats[chats.length - 1].updated_at;
+          sentinel.textContent = 'Scroll for more\u2026';
+        }
+      } catch (e) {
+        sentinel.textContent = `Error: ${e.message}`;
+        console.error(e);
+      } finally {
+        loading = false;
+      }
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) loadMore();
+    }, { rootMargin: '400px' });
+    observer.observe(sentinel);
+
+    loadMore();
+
+    // Mobile menubar toggle
+    const menuToggle = document.getElementById('menu-toggle');
+    const siteNav = document.getElementById('sitenav');
+    if (menuToggle && siteNav) {
+      menuToggle.addEventListener('click', () => {
+        const open = siteNav.classList.toggle('open');
+        menuToggle.setAttribute('aria-expanded', String(open));
+      });
+      siteNav.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', () => {
+          siteNav.classList.remove('open');
+          menuToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+      const mq = window.matchMedia('(min-width: 721px)');
+      mq.addEventListener('change', () => { if (mq.matches) siteNav.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
