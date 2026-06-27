@@ -291,6 +291,9 @@ def main():
     conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
     conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", ("embedding_model", args.model))
     conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", ("embedding_dim", str(embedding_dim)))
+    from datetime import datetime as _dt
+    conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)",
+                 ("built_at", _dt.now().isoformat(timespec="seconds")))
     conn.commit()
     conn.close()
 
