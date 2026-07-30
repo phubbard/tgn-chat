@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for the TGN search API (serve.py).
+
+  Install:
+    cp deploy/net.phfactor.tgnchat.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.phfactor.tgnchat.plist
+  Restart:
+    launchctl kickstart -k gui/$(id -u)/net.phfactor.tgnchat
+  Stop (and disable auto-restart):
+    launchctl bootout gui/$(id -u)/net.phfactor.tgnchat
+
+  Runs as a per-user Agent (not a Daemon) because it depends on LM Studio,
+  which is a GUI app in the user's login session.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.phfactor.tgnchat</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/pfh/code/rag-exploration/scripts/serve.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/pfh/code/rag-exploration</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/pfh/code/rag-exploration/logs/serve.launchd.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/pfh/code/rag-exploration/logs/serve.launchd.log</string>
+</dict>
+</plist>

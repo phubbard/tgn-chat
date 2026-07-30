@@ -72,9 +72,14 @@ pip install -r ingest/requirements.txt
 # Build (or incrementally rebuild) the database
 python ingest/rebuild.py --model bge-m3
 
-# Run
+# Run (dev)
 python web/serve.py &        # search API on :5555
-caddy run                    # reverse proxy on :8080
+caddy run                    # reverse proxy on :8081
+
+# Run (production): serve.py as a launchd agent that waits for LM Studio
+# and auto-restarts on crash; caddy separately.
+cp deploy/net.phfactor.tgnchat.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.phfactor.tgnchat.plist
 ```
 
 ## Project structure
