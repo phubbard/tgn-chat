@@ -76,10 +76,12 @@ python ingest/rebuild.py --model bge-m3
 python web/serve.py &        # search API on :5555
 caddy run                    # reverse proxy on :8081
 
-# Run (production): serve.py as a launchd agent that waits for LM Studio
-# and auto-restarts on crash; caddy separately.
-cp deploy/net.phfactor.tgnchat.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.phfactor.tgnchat.plist
+# Run (production): both services as launchd agents (auto-start + restart).
+# See "Runtime infrastructure" below.
+for p in net.phfactor.tgnchat net.phfactor.tgnchat-caddy; do
+  cp deploy/$p.plist ~/Library/LaunchAgents/
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/$p.plist
+done
 ```
 
 ## Project structure
@@ -97,12 +99,61 @@ web/
   app.js            chat orchestration, LM Studio streaming
   search.js         thin client for server-side search
   serve.py          search API server (hybrid search + logging)
-Caddyfile           reverse proxy config
+Caddyfile           reverse proxy config (listens on :8081)
+scripts/
+  serve.sh          launchd wrapper: wait for LM Studio, then run serve.py
+deploy/
+  net.phfactor.tgnchat.plist        LaunchAgent for serve.py
+  net.phfactor.tgnchat-caddy.plist  LaunchAgent for caddy
 ```
+
+## Runtime infrastructure
+
+Three long-running services on the Mac Studio, all in the user's login session:
+
+```
+public proxy ──▶ caddy :8081 ──┬──▶ serve.py :5555        (search API + logging)
+                               ├──▶ LM Studio :1234       (/v1/embeddings, /v1/chat)
+                               └──▶ web/ static files
+```
+
+Both `caddy` and `serve.py` run as **launchd LaunchAgents** (not Daemons — they
+depend on LM Studio, which is a GUI app in the login session). Each has
+`RunAtLoad` (start at login) and `KeepAlive` (auto-restart on crash). Plists
+live in `deploy/`; installed copies go in `~/Library/LaunchAgents/`.
+
+| Service | Label | Port | Notes |
+|---|---|---|---|
+| Search API | `net.phfactor.tgnchat` | 5555 | via `scripts/serve.sh` wrapper |
+| Reverse proxy | `net.phfactor.tgnchat-caddy` | 8081 | serves static files + proxies `/v1`, `/search`, etc. |
+| LM Studio | `ai.lmstudio.server` | 1234 | LM Studio's own agent; autostarts on login |
+
+**Dependency on LM Studio.** launchd has no native inter-service dependency for
+a GUI app, so `scripts/serve.sh` approximates it: it runs `lms server start`
+(idempotent) and blocks until `:1234` answers before starting `serve.py`, so the
+API never serves queries before embeddings are available.
+
+**Port note.** Caddy listens on **:8081** (not :8080) because another local
+service holds :8080. The public-facing upstream proxy must point at :8081.
+
+Common operations (`gui/$(id -u)` = your user's launchd domain):
+
+```bash
+launchctl print gui/$(id -u)/net.phfactor.tgnchat        # status (or -caddy)
+
+launchctl kickstart -k gui/$(id -u)/net.phfactor.tgnchat # restart serve.py
+                                                         # (do this after rebuild.py)
+
+caddy reload --config Caddyfile --adapter caddyfile      # apply Caddyfile edits (no restart)
+
+launchctl bootout gui/$(id -u)/net.phfactor.tgnchat      # stop + disable auto-restart
+```
+
+Logs: `logs/serve.launchd.log` and `logs/caddy.launchd.log`.
 
 ## Requirements
 
 - Python 3.10+ with `requests`, `sqlite-vec`
 - [LM Studio](https://lmstudio.ai) with `bge-m3` (embedding) and a chat model loaded, server running on `127.0.0.1:1234`
-- [Caddy](https://caddyserver.com) (optional, for LAN access)
+- [Caddy](https://caddyserver.com) — reverse proxy on :8081 (see Runtime infrastructure)
 - Source data in `data/inputs/` (not included, ~1GB)

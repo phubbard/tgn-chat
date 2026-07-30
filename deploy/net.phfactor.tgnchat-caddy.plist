@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for Caddy (reverse proxy + static files) fronting the TGN app.
+
+  Install:
+    cp deploy/net.phfactor.tgnchat-caddy.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.phfactor.tgnchat-caddy.plist
+  Reload after editing the Caddyfile (no restart needed):
+    caddy reload --config /Users/pfh/code/rag-exploration/Caddyfile --adapter caddyfile
+  Restart:
+    launchctl kickstart -k gui/$(id -u)/net.phfactor.tgnchat-caddy
+  Stop (and disable auto-restart):
+    launchctl bootout gui/$(id -u)/net.phfactor.tgnchat-caddy
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.phfactor.tgnchat-caddy</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/caddy</string>
+        <string>run</string>
+        <string>--config</string>
+        <string>/Users/pfh/code/rag-exploration/Caddyfile</string>
+        <string>--adapter</string>
+        <string>caddyfile</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/pfh/code/rag-exploration</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/pfh/code/rag-exploration/logs/caddy.launchd.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/pfh/code/rag-exploration/logs/caddy.launchd.log</string>
+</dict>
+</plist>
