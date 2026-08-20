@@ -91,7 +91,8 @@ ingest/
   chunk.py          parse episodes into structured chunks
   embed.py          embed chunks via LM Studio
   build_db.py       build SQLite DB with vectors + FTS5
-  rebuild.py        incremental rebuild (only re-embeds changed episodes)
+  rebuild.py        incremental rebuild (content-addressed cache; only
+                    re-embeds chunks whose text changed)
   eval.py           compare retrieval across embedding models
   sync.sh           rsync episode data from the transcription server
 web/
