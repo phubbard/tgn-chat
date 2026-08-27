@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "TGN Chat — Runtime Architecture",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/phubbard/tgn-chat",
+      "revision": "32c945093b8d25ca2dc7b32c7d14331e1cd3ab60"
+    },
+    "views": [
+      { "id": "query-path", "label": "Query path", "focus": ["browser", "caddy", "serve", "vec", "fts"], "note": "A question enters at the edge and returns ranked chunks." },
+      { "id": "retrieval", "label": "Hybrid retrieval", "focus": ["serve", "lmstudio", "vec", "fts"], "note": "Embed the query, then search vectors and keywords in parallel." },
+      { "id": "generation", "label": "Generation", "focus": ["browser", "caddy", "lmstudio"], "note": "The browser streams the answer straight from the local chat model." }
+    ]
+  },
+  "components": [
+    { "id": "browser", "type": "frontend", "label": "Browser", "sublabel": "vanilla JS + water.css", "pos": [40, 330], "size": [150, 64], "sources": [{ "path": "web/app.js", "label": "chat UI + SSE streaming" }] },
+    { "id": "caddy", "type": "cloud", "label": "Caddy", "sublabel": "reverse proxy :8081", "pos": [280, 330], "size": [150, 64], "sources": [{ "path": "Caddyfile", "label": "routes + static files" }] },
+    { "id": "serve", "type": "backend", "label": "serve.py", "sublabel": "hybrid search :5555", "pos": [520, 330], "size": [150, 64], "tag": "launchd agent", "sources": [{ "path": "web/serve.py", "label": "hybrid_search()" }] },
+    { "id": "lmstudio", "type": "backend", "label": "LM Studio", "sublabel": "local inference :1234", "pos": [520, 160], "size": [160, 64], "tag": "bge-m3 + chat" },
+    { "id": "vec", "type": "database", "label": "sqlite-vec", "sublabel": "vec0 · 1024-d KNN", "pos": [790, 268], "size": [160, 64], "sources": [{ "path": "ingest/build_db.py", "label": "chunks_vec" }] },
+    { "id": "fts", "type": "database", "label": "FTS5", "sublabel": "BM25 keyword", "pos": [790, 396], "size": [160, 64], "sources": [{ "path": "ingest/build_db.py", "label": "chunks_fts" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Mac Studio · localhost (127.0.0.1)", "wraps": ["caddy", "serve", "lmstudio", "vec", "fts"] },
+    { "kind": "region", "label": "podcast.db · one SQLite file · 9,026 chunks · 160 MB", "wraps": ["vec", "fts"] }
+  ],
+  "connections": [
+    { "id": "browser-caddy", "from": "browser", "to": "caddy", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "caddy-serve", "from": "caddy", "to": "serve", "label": "POST /search" },
+    { "id": "serve-embed", "from": "serve", "to": "lmstudio", "label": "embed query · bge-m3", "fromSide": "top", "toSide": "bottom" },
+    { "id": "serve-vec", "from": "serve", "to": "vec", "label": "vector KNN" },
+    { "id": "serve-fts", "from": "serve", "to": "fts", "label": "keyword BM25" },
+    { "id": "caddy-chat", "from": "caddy", "to": "lmstudio", "label": "POST /v1/chat · SSE stream", "variant": "emphasis", "fromSide": "top", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Client", "items": ["Vanilla JS, no build step", "Renders streamed markdown with inline episode citations"] },
+    { "dot": "emerald", "title": "Hybrid retrieval", "items": ["serve.py embeds the query via LM Studio (bge-m3)", "sqlite-vec KNN + FTS5 BM25, merged by distance"] },
+    { "dot": "violet", "title": "Generation", "items": ["Browser streams from LM Studio /v1/chat/completions", "Retrieved chunks injected into the system prompt"] }
+  ]
+}

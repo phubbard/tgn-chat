@@ -34,6 +34,12 @@ Live at [tgnchat.phfactor.net](https://tgnchat.phfactor.net/).
                     +-------------------+
 ```
 
+📊 **[Interactive architecture diagram](docs/architecture.html)** — open in a browser
+for a source-pinned, explorable version (light/dark, guided views, zoom). Generated
+with [archify](https://github.com/tt-a1i/archify); regenerate from
+[`docs/architecture.json`](docs/architecture.json). See also the full
+[design doc](docs/DESIGN.md).
+
 ## How it works
 
 1. User asks a question in the browser
