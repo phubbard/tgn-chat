@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "TGN Chat — Query Lifecycle",
+    "quality_profile": "showcase",
+    "viewBox": [960, 540],
+    "column_fit": "spread",
+    "views": [
+      { "id": "retrieve", "label": "Embed + retrieve", "focus": ["browser", "caddy", "serve", "lm", "db"], "note": "Embed the question, then search vectors and keywords." },
+      { "id": "generate", "label": "Generate", "focus": ["browser", "caddy", "lm"], "note": "The browser streams the answer straight from the chat model." },
+      { "id": "log", "label": "Async logging", "focus": ["browser", "caddy", "serve"], "note": "Metrics are logged off the response path." }
+    ]
+  },
+  "participants": [
+    { "id": "browser", "type": "frontend", "label": "Browser", "sublabel": "app.js" },
+    { "id": "caddy", "type": "cloud", "label": "Caddy", "sublabel": "reverse proxy :8081" },
+    { "id": "serve", "type": "backend", "label": "serve.py", "sublabel": "hybrid search :5555" },
+    { "id": "lm", "type": "backend", "label": "LM Studio", "sublabel": "bge-m3 + chat :1234" },
+    { "id": "db", "type": "database", "label": "SQLite", "sublabel": "vec0 + FTS5" }
+  ],
+  "segments": [
+    { "from": 165, "to": 276, "label": "Embed query" },
+    { "from": 282, "to": 370, "label": "Hybrid retrieval" },
+    { "from": 372, "to": 456, "label": "Generate" }
+  ],
+  "messages": [
+    { "id": "ask", "from": "browser", "to": "caddy", "y": 175, "label": "POST /search", "variant": "emphasis" },
+    { "id": "proxy-search", "from": "caddy", "to": "serve", "y": 202, "label": "proxy" },
+    { "id": "embed", "from": "serve", "to": "lm", "y": 230, "label": "embed query · bge-m3", "variant": "emphasis" },
+    { "id": "vector", "from": "lm", "to": "serve", "y": 258, "label": "1024-d vector", "variant": "return" },
+    { "id": "knn", "from": "serve", "to": "db", "y": 292, "label": "vec0 KNN (k=32)" },
+    { "id": "knn-hits", "from": "db", "to": "serve", "y": 320, "label": "nearest chunks", "variant": "return" },
+    { "id": "fts", "from": "serve", "to": "db", "y": 350, "label": "FTS5 MATCH · BM25" },
+    { "id": "merged", "from": "serve", "to": "browser", "y": 384, "label": "merged top-16 chunks", "variant": "return" },
+    { "id": "chat", "from": "browser", "to": "lm", "y": 416, "label": "POST /v1/chat · stream", "variant": "emphasis" },
+    { "id": "stream", "from": "lm", "to": "browser", "y": 446, "label": "SSE token stream", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "serve", "from": 202, "to": 384, "type": "backend" },
+    { "participant": "lm", "from": 226, "to": 260, "type": "backend" },
+    { "participant": "db", "from": 288, "to": 354, "type": "database" },
+    { "participant": "lm", "from": 414, "to": 448, "type": "backend" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Server retrieves, browser generates", "items": ["serve.py owns embedding + hybrid search (vec0 KNN + FTS5 BM25 → top 16)", "The chat call streams browser → LM Studio (via Caddy); tokens skip the Python server"] }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "TGN Chat — Data Lineage",
+    "quality_profile": "showcase",
+    "viewBox": [1072, 560],
+    "views": [
+      { "id": "chunking", "label": "Source to chunks", "focus": ["episode", "shownotes", "chunks"], "note": "One episode.md plus curated links become typed chunks." },
+      { "id": "index", "label": "Two indexes", "focus": ["chunks", "embed", "ftsidx", "vec", "fts"], "note": "Every chunk's text is both embedded and keyword-indexed." },
+      { "id": "retrieval", "label": "Hybrid retrieval", "focus": ["vec", "fts", "serve"], "note": "serve.py merges vector and keyword hits at query time." }
+    ]
+  },
+  "stages": [
+    { "label": "Source" },
+    { "label": "Chunk" },
+    { "label": "Index" },
+    { "label": "Store" },
+    { "label": "Serve" }
+  ],
+  "nodes": [
+    { "id": "episode", "type": "external", "label": "episode.md", "sublabel": "synopsis · transcript", "stage": 0, "row": 0, "tag": "per episode" },
+    { "id": "shownotes", "type": "external", "label": "shownotes.md", "sublabel": "curated links", "stage": 0, "row": 2, "tag": "7,663 links" },
+    { "id": "chunks", "type": "backend", "label": "Typed chunks", "sublabel": "3 types", "stage": 1, "row": 1, "tag": "9,026 chunks" },
+    { "id": "embed", "type": "backend", "label": "bge-m3 embed", "sublabel": "1024-d vectors", "stage": 2, "row": 0, "tag": "content-cached" },
+    { "id": "ftsidx", "type": "backend", "label": "FTS5 tokenize", "sublabel": "porter + unicode61", "stage": 2, "row": 2 },
+    { "id": "vec", "type": "database", "label": "chunks_vec", "sublabel": "vec0 · KNN", "stage": 3, "row": 0 },
+    { "id": "fts", "type": "database", "label": "chunks_fts", "sublabel": "BM25", "stage": 3, "row": 2 },
+    { "id": "serve", "type": "backend", "label": "serve.py", "sublabel": "hybrid search", "stage": 4, "row": 1 }
+  ],
+  "flows": [
+    { "id": "ep-chunks", "from": "episode", "to": "chunks", "label": "parse sections", "variant": "emphasis" },
+    { "id": "sn-chunks", "from": "shownotes", "to": "chunks", "label": "curated links" },
+    { "id": "chunks-embed", "from": "chunks", "to": "embed", "label": "chunk text", "variant": "emphasis" },
+    { "id": "chunks-fts", "from": "chunks", "to": "ftsidx", "label": "chunk text" },
+    { "id": "embed-vec", "from": "embed", "to": "vec", "label": "1024-d vectors", "variant": "emphasis" },
+    { "id": "fts-store", "from": "ftsidx", "to": "fts", "label": "terms" },
+    { "id": "vec-serve", "from": "vec", "to": "serve", "label": "vector KNN", "variant": "emphasis" },
+    { "id": "fts-serve", "from": "fts", "to": "serve", "label": "keyword BM25" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "One source, two indexes", "items": ["episode.md + shownotes.md become synopsis, transcript, and link chunks", "Each chunk's text is both embedded (vec0) and keyword-indexed (FTS5)"] },
+    { "dot": "cyan", "title": "Hybrid + content-addressed", "items": ["vec0 KNN (semantic) + FTS5 BM25 (lexical), merged in serve.py", "Embeddings cached by sha256(text) — cosmetic edits cost 0 re-embeds"] }
+  ]
+}

@@ -34,11 +34,13 @@ Live at [tgnchat.phfactor.net](https://tgnchat.phfactor.net/).
                     +-------------------+
 ```
 
-📊 **[Interactive architecture diagram](docs/architecture.html)** — open in a browser
-for a source-pinned, explorable version (light/dark, guided views, zoom). Generated
-with [archify](https://github.com/tt-a1i/archify); regenerate from
-[`docs/architecture.json`](docs/architecture.json). See also the full
-[design doc](docs/DESIGN.md).
+📊 **Interactive diagrams** (open in a browser — light/dark, guided views, zoom, export):
+[architecture](docs/architecture.html) ·
+[ingest & rebuild](docs/ingest.html) ·
+[query lifecycle](docs/sequence.html) ·
+[data lineage](docs/dataflow.html). Generated with
+[archify](https://github.com/tt-a1i/archify) from the `docs/*.json` specs. See also the
+full [design doc](docs/DESIGN.md).
 
 ## How it works
 

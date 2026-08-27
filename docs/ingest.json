@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "TGN Chat — Ingest & Incremental Rebuild",
+    "quality_profile": "showcase",
+    "viewBox": [1180, 714],
+    "views": [
+      { "id": "pull-chunk", "label": "Pull & chunk", "focus": ["sync", "chunk", "cache"], "note": "Sync episode data and split it into typed chunks." },
+      { "id": "cache-decision", "label": "Cache decision", "focus": ["cache", "embed"], "note": "The cache check re-embeds only chunk text that actually changed." },
+      { "id": "build", "label": "Build the DB", "focus": ["embed", "build", "db"], "note": "Assemble one SQLite file with vectors and a keyword index." }
+    ]
+  },
+  "lanes": [
+    { "id": "source", "label": "Source data" },
+    { "id": "chunklane", "label": "Chunk" },
+    { "id": "gatelane", "label": "Cache gate" },
+    { "id": "embedlane", "label": "Embed" },
+    { "id": "store", "label": "Database" }
+  ],
+  "phases": [
+    { "id": "pull", "label": "Pull + chunk", "fromCol": 0, "toCol": 1 },
+    { "id": "embedphase", "label": "Cache + embed", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "buildphase", "label": "Build", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["sync", "chunk", "cache", "embed", "build", "db"],
+  "nodes": [
+    { "id": "sync", "lane": "source", "col": 0, "type": "external", "label": "sync.sh", "sublabel": "rsync latest" },
+    { "id": "chunk", "lane": "chunklane", "col": 1, "type": "backend", "label": "chunk.py", "sublabel": "3 chunk types" },
+    { "id": "cache", "lane": "gatelane", "col": 2, "type": "security", "label": "Cache check", "sublabel": "sha256(text)", "tag": "changed only" },
+    { "id": "embed", "lane": "embedlane", "col": 3, "type": "backend", "label": "Embed", "sublabel": "LM Studio bge-m3" },
+    { "id": "build", "lane": "store", "col": 4, "type": "backend", "label": "build_db", "sublabel": "vec0 + FTS5" },
+    { "id": "db", "lane": "store", "col": 5, "type": "database", "label": "podcast.db", "sublabel": "9,026 chunks" }
+  ],
+  "edges": [
+    { "from": "sync", "to": "chunk", "role": "main", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "chunk", "to": "cache", "role": "main", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "cache", "to": "embed", "role": "main", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "embed", "to": "build", "role": "main", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "build", "to": "db", "role": "main" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Incremental by design", "items": ["Embeddings keyed by sha256(chunk text) — only changed text re-embeds; a no-op rebuild reuses 100% in ~6s (was ~11 min)", "build_db writes text + vec0 + FTS5; then kickstart serve.py to load it"] }
+  ]
+}

@@ -39,6 +39,8 @@ The thesis being evaluated: **you can build a genuinely useful retrieval-augment
 
 ## 2. System architecture
 
+> 📊 **[Interactive version →](architecture.html)** (source-pinned, light/dark, zoom, export)
+
 ```mermaid
 graph TB
     subgraph Client["Browser — vanilla JS, no build step"]
@@ -86,6 +88,8 @@ graph TB
 
 ### Request lifecycle (a single question)
 
+> 📊 **[Interactive version →](sequence.html)**
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -124,6 +128,8 @@ Two things worth noting:
 ---
 
 ## 3. Data model
+
+> 📊 **[Interactive data-lineage version →](dataflow.html)**
 
 A single SQLite database is the whole store. Four logical pieces: episode metadata, chunk text, dense vectors, and the keyword index.
 
@@ -180,6 +186,8 @@ Notes:
 ---
 
 ## 4. Ingest pipeline
+
+> 📊 **[Interactive version →](ingest.html)** (with the incremental content-cache decision)
 
 The pipeline is four stages, each a standalone script that reads the previous stage's output. This makes it restartable and model-swappable.
 
